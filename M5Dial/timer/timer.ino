@@ -9,6 +9,12 @@ x timer set to only go off for 30 seconds
 n/a - think about maybe adding a motion detection to stop alarm from sounding; no hardware available
 */
 
+//***Configuarble options START
+int num[3] = { 0, 20, 0 };         // hours, min, secx; default starting timer
+int alarmTimerDuration = 15000;  //ms; length of alarm timer sounding, so we don't annoy the neighbors
+//***Configuarble options END
+
+
 void setup() {
   auto cfg = M5.config();
   M5Dial.begin(cfg, true, true);
@@ -19,11 +25,11 @@ void setup() {
   delay(200);
 }
 
-long oldPosition = -999;
+long oldPosition;// = -999;
 int mode = 0;  // 0 is set, 1 ir run , 3 is ringing
 int lastS = -999;
 
-int num[3] = { 0, 1, 0 };         // hours, min, secx
+
 String numS[3] = { "", "", "" };  ///same as num just String
 int mm[3] = { 24, 60, 60 };       // max value for hout, min , sec
 int chosen = 2;                   // chosen in array
@@ -32,12 +38,12 @@ bool z = 0;
 bool deb = 0;
 bool deb2 = 0;
 
-int lastTimer[3] = { 0, 1, 0 };  //holds the last timer value; default is one minute
 bool alarmStart = 0;
-int alarmTimerDuration = 15000;  //length of alarm timer, so we don't annoy the neighbors
 Timer alarmTimer;
 long stopAlarmEncoderOldPos;  //tracks position of encoder when alarm sounds; allows us to turn encoder to stop
-bool actionButtonPressed=0;
+bool isScreenPressed=0; //track if the screen is pressed; allows for us to simulate a button press
+int lastTimer[3] = { 0, 0, 0 };  //hours, minutes, seconds;  holds the last timer value
+
 
 void draw() {
   if (mode == 3) {
@@ -142,7 +148,7 @@ void loop() {
   auto x = M5Dial.Touch.getDetail();
   if (x.isReleased())
   {
-    actionButtonPressed = 0;
+    isScreenPressed = 0;
   }
 
   if (M5Dial.BtnA.isPressed()) {
@@ -169,7 +175,7 @@ void loop() {
         M5Dial.Speaker.tone(3000, 100);
         if (t.y > 160) {
           mode = 1;  //start pressed
-          actionButtonPressed = 1;
+          isScreenPressed = 1;
           stopAlarmEncoderOldPos = M5Dial.Encoder.read();
           lastTimer[chosen] = num[chosen];  //saves the chosen time to lastimer
           sleep(0.200);
@@ -200,8 +206,9 @@ void loop() {
     //   stopAlarmAndReset();
     // else
 
-    auto t = M5Dial.Touch.getDetail();
-    if (t.isPressed() && actionButtonPressed == 0 && t.y > 160) {
+    //timer counting, STOP button detection
+    auto t = M5Dial.Touch.getDetail(); 
+    if (t.isPressed() && isScreenPressed == 0 && t.y > 160) {
       M5Dial.Speaker.tone(3000, 100);
       stopAlarmAndReset();
     }
