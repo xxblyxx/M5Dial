@@ -25,6 +25,11 @@ unsigned long lastDisplayUpdate = 0;
 unsigned long lastButtonPress = 0;  // Safety: prevent button debounce issues
 const unsigned long BUTTON_DEBOUNCE = 50;  // ms
 
+// Reset button double-click detection
+unsigned long lastResetButtonTime = 0;
+bool resetButtonPressed = false;
+const unsigned long DOUBLE_CLICK_TIMEOUT = 500;  // ms
+
 // Screen dimming for power savings
 unsigned long lastActivityTime = 0;
 const unsigned long INACTIVITY_TIMEOUT = 30000;  // 30 seconds
@@ -191,13 +196,27 @@ void updateTime() {
     stopAlarmAndReset();
 }
 
-void reset() {
-  //always resets to 15 minutes, 0 seconds; allows for quick reset to common pomodoro time
+void resetToLastTimer() {
+  // Single click: restore to the timer value that was run
+  mode = 0;
+  num[0] = lastTimer[0];
+  num[1] = lastTimer[1];
+  num[2] = lastTimer[2];
+  alarmStart = 0;
+}
+
+void resetTo15Minutes() {
+  // Double click: reset to 15 minutes and 0 seconds
   mode = 0;
   num[0] = 0;
   num[1] = 15;
   num[2] = 0;
   alarmStart = 0;
+}
+
+void reset() {
+  // Legacy function - now routes through resetToLastTimer()
+  resetToLastTimer();
 }
 
 void stopAlarmAndReset() {
@@ -218,13 +237,31 @@ void loop() {
   // Track user activity for screen dimming
   bool userActive = false;
 
-  // Emergency reset - always available, even if stuck
+  // Emergency reset with double-click detection - always available, even if stuck
   if (M5Dial.BtnA.isPressed()) {
-    if (now - lastButtonPress > BUTTON_DEBOUNCE) {
-      stopAlarmAndReset();
+    if (!resetButtonPressed && (now - lastButtonPress > BUTTON_DEBOUNCE)) {
+      resetButtonPressed = true;
+      
+      // Check if this is a double click
+      if (now - lastResetButtonTime <= DOUBLE_CLICK_TIMEOUT) {
+        // Double click detected - reset to 15 minutes
+        M5Dial.Speaker.tone(2800, 100);
+        resetTo15Minutes();
+        delay(200);
+        lastResetButtonTime = 0;  // Reset for next sequence
+      } else {
+        // First click of new sequence - restore to last timer value
+        M5Dial.Speaker.tone(2800, 100);
+        resetToLastTimer();
+        delay(200);
+        lastResetButtonTime = now;
+      }
+      
       lastButtonPress = now;
       userActive = true;
     }
+  } else {
+    resetButtonPressed = false;  // Button released
   }
 
   //alarm active, disable alarm if dial or screen is touched
