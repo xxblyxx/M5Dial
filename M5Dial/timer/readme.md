@@ -5,7 +5,7 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 ## Features
 
 - **Precise Timing**: Uses `millis()` for accurate elapsed time tracking (eliminates RTC-based inaccuracy)
-- **Default 15-Minute Timer**: Perfect for Pomodoro sessions, always resets to 15:00
+- **Configurable Default Timer**: Perfect for Pomodoro sessions, starts at 15:00 and can be changed in the CFG menu
 - **Intuitive Interface**: 
   - Rotate encoder to adjust hours, minutes, seconds
   - Touch bottom area to start timer
@@ -15,11 +15,17 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Auto Reset**: Alarm auto-stops after 15 seconds and returns to setup screen
 - **Responsive Controls**: Non-blocking audio and improved debouncing prevents input lockups
 - **Power Saving**: Dims after 30 seconds of setup inactivity, enters light sleep after 1 hour; touch, Button A, or the encoder wake it back up
+- **Configuration Menu**: Long-hold Button A from the setup screen to edit power saving and the default reset timer
 
 ## Hardware Requirements
 
 - **M5Dial** smart rotary device
 - USB-C for power and programming
+
+## M5 Dial screen specs
+- Screen Shape: Circular/Round
+- Resolution: 240 x 240 pixels
+- Size: 1.28 inch
 
 ## Libraries Required
 
@@ -41,9 +47,12 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Encoder Rotation**: Adjust selected time unit (hours/minutes/seconds)
 - **Touch Top/Middle**: Switch between time units (green indicator shows current)
 - **Touch Bottom (Setup)**: Start timer
+- **Button A Hold (Setup)**: Open configuration menu
 - **Touch Anywhere (Running)**: Stop and return to setup
 - **Touch/Rotate (Alarm)**: Stop alarm and return to setup
 - **Button A**: Emergency reset (always available)
+- **Button A Single Press**: Restores the last timer value that was run
+- **Button A Double Press**: Resets to the configured default timer
 
 ## Configuration
 
@@ -87,6 +96,21 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 └─────────────────────────┘
 ```
 
+### Configuration Menu
+
+```
+┌─────────────────────────┐
+│          CFG            │
+├─────────────────────────┤
+│ [ ] DIM    [ ] SLEEP    │
+│                         │
+│        DEFAULT          │
+│      00:15:00           │
+├─────────────────────────┤
+│          SAVE           │
+└─────────────────────────┘
+```
+
 ## Recent Updates (April 2026)
 
 - ✅ Fixed critical timer expiration race condition that caused stuck state
@@ -100,6 +124,7 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 - ✅ Simplified the running UI to show only the timer and progress bar
 - ✅ Restores the full setup UI automatically when the timer stops
 - ✅ Added inactivity-based low-power light sleep
+- ✅ Added configuration menu for power settings and default timer
 
 ## Troubleshooting
 
