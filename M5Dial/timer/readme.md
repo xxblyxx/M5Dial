@@ -8,12 +8,13 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Default 15-Minute Timer**: Perfect for Pomodoro sessions, always resets to 15:00
 - **Intuitive Interface**: 
   - Rotate encoder to adjust hours, minutes, seconds
-  - Touch bottom area to start/stop timer
+  - Touch bottom area to start timer
   - Touch top/middle area to switch between time units
 - **Alarm Notification**: Visual (flashing display) and audio (4kHz beep) alerts when timer expires
 - **Multiple Stop Methods**: Stop alarm by touching screen, rotating encoder, or pressing Button A
 - **Auto Reset**: Alarm auto-stops after 15 seconds and returns to setup screen
 - **Responsive Controls**: Non-blocking audio and improved debouncing prevents input lockups
+- **Power Saving**: Dims after 30 seconds of setup inactivity, enters light sleep after 1 hour; touch, Button A, or the encoder wake it back up
 
 ## Hardware Requirements
 
@@ -40,7 +41,7 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Encoder Rotation**: Adjust selected time unit (hours/minutes/seconds)
 - **Touch Top/Middle**: Switch between time units (green indicator shows current)
 - **Touch Bottom (Setup)**: Start timer
-- **Touch Bottom (Running)**: Stop and return to setup
+- **Touch Anywhere (Running)**: Stop and return to setup
 - **Touch/Rotate (Alarm)**: Stop alarm and return to setup
 - **Button A**: Emergency reset (always available)
 
@@ -56,6 +57,8 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 
 ## Display Layout
 
+### Setup Screen
+
 ```
 ┌─────────────────────────┐
 │   BLY POMODORO  (Title) │
@@ -66,8 +69,21 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 │  (Green indicator shows │
 │   current selected unit)│
 ├─────────────────────────┤
-│    START / STOP         │
-│      RESET              │
+│         START           │
+│          RESET          │
+└─────────────────────────┘
+```
+
+### Running Screen
+
+```
+┌─────────────────────────┐
+│                         │
+│      00:14:59           │
+│    (Black background)   │
+│                         │
+│  (Circular progress bar │
+│   around screen edge)   │
 └─────────────────────────┘
 ```
 
@@ -81,12 +97,19 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 - ✅ Set alarm start flag immediately for better state management
 - ✅ Added safety timeout for alarm auto-stop after 15 seconds
 - ✅ Always reset timer to 15:00 regardless of previous settings
+- ✅ Simplified the running UI to show only the timer and progress bar
+- ✅ Restores the full setup UI automatically when the timer stops
+- ✅ Added inactivity-based low-power light sleep
 
 ## Troubleshooting
 
 **Timer gets stuck:**
 - Press Button A for emergency reset
 - Check Timer library is properly installed
+
+**Screen sleeps after long inactivity:**
+- After 1 hour in setup mode, the device enters light sleep
+- Touch, Button A, or the encoder wakes it back up
 
 **Alarm won't stop:**
 - Touch screen, rotate encoder, or press Button A

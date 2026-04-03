@@ -1,5 +1,7 @@
 #include "M5Dial.h"
 #include "Timer.h"
+#include <driver/gpio.h>
+#include <esp_sleep.h>
 M5Canvas img(&M5Dial.Display);
 
 /* todo
@@ -7,6 +9,11 @@ M5Canvas img(&M5Dial.Display);
 ✓ when reset change to 15 minutes and 0 seconds as default
 ✓ screen dimming on inactivity (dims after 30s, wakes on touch/button)
 ✓ improved UI with centered timer, progress bar, better layout
+- ui update: ✓
+  when the timer starts, i want to remove the "bly pomodoro" at top, stop, and reset text.  make the screen black with only the timer and the progress bar showing.
+  once the timer stops, reset the screen to the default with the "bly pomodoro" text and the buttons showing again.  this way we can maximize the size of the timer text during the countdown, and minimize distractions.
+- low-power sleep:
+  after 1 hour of idle setup time, enter light sleep
 */
 
 //***Configuarble options START
@@ -33,8 +40,9 @@ const unsigned long DOUBLE_CLICK_TIMEOUT = 500;  // ms
 // Screen dimming for power savings
 unsigned long lastActivityTime = 0;
 const unsigned long INACTIVITY_TIMEOUT = 30000;  // 30 seconds
+const unsigned long LIGHT_SLEEP_TIMEOUT = 60000; //test value do not change //3600000;  // 1 hour
 const uint8_t NORMAL_BRIGHTNESS = 128;
-const uint8_t DIM_BRIGHTNESS = 20;
+const uint8_t DIM_BRIGHTNESS = 5;
 bool isScreenDimmed = false;
 
 // Display and UI
@@ -95,6 +103,34 @@ void drawProgressBar() {
   }
 }
 
+void drawSetupScreen() {
+  img.fillSprite(BLACK);
+  img.fillRect(0, 160, 240, 60, 0x0A2D);
+  img.fillRect(0, 0, 240, 80, 0x0A2D);
+
+  img.setTextColor(ORANGE, 0x0A2D);
+  img.drawString("BLY POMODORO", 120, 60, 4);
+
+  img.setTextColor(WHITE, BLACK);
+  img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
+
+  if (mode == 0) {
+    img.fillRect(14 + (chosen * 76), 150, 59, 4, GREEN);
+    img.setTextColor(WHITE, 0x0A2D);
+    setActionButtonText("START");
+  }
+
+  img.setTextColor(ORANGE, BLACK);
+  img.drawString("RESET", 120, 232, 2);
+}
+
+void drawRunningScreen() {
+  img.fillSprite(BLACK);
+  img.setTextColor(WHITE, BLACK);
+  img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
+  drawProgressBar();
+}
+
 void draw() {
   if (mode == 3) {
 
@@ -125,42 +161,47 @@ void draw() {
 
     alarmStart = 1;
   } else {
-    img.fillSprite(BLACK);
-    img.fillRect(0, 160, 240, 60, 0x0A2D);
-    img.fillRect(0, 0, 240, 80, 0x0A2D);
-    img.setTextColor(WHITE, 0x0A2D);
-    //img.drawString("START", 120, 190, 4);
-    if (mode == 0)
-      setActionButtonText("START");
-    else if (mode == 1 || mode == 2)
-    {
-      setActionButtonText("STOP");
+    if (mode == 1) {
+      drawRunningScreen();
+    } else {
+      drawSetupScreen();
     }
-    img.setTextColor(ORANGE, BLACK);
-    img.drawString("RESET", 120, 232, 2);
-    img.setTextColor(ORANGE, 0x0A2D);
-    img.drawString("BLY POMODORO", 120, 60, 4);
-    img.setTextColor(WHITE, BLACK);
-    if (mode == 0)
-      img.fillRect(14 + (chosen * 76), 150, 59, 4, GREEN);
-    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
-    
-    // Draw progress bar during Timer run
-    drawProgressBar();
   }
   img.pushSprite(0, 0);
 }
 
 void updateScreenBrightness() {
   unsigned long now = millis();
+  unsigned long inactiveTime = now - lastActivityTime;
   
+  // Running or alarming should always stay bright.
+  if (mode != 0) {
+    if (isScreenDimmed) {
+      M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+      isScreenDimmed = false;
+    }
+    return;
+  }
+
+  // After a long idle period, enter light sleep so touch/button/encoder can wake it.
+  if (inactiveTime >= LIGHT_SLEEP_TIMEOUT) {
+    gpio_wakeup_enable(GPIO_NUM_42, GPIO_INTR_LOW_LEVEL);  // Button A
+    gpio_wakeup_enable((gpio_num_t)DIAL_ENCODER_PIN_A, GPIO_INTR_LOW_LEVEL);
+    gpio_wakeup_enable((gpio_num_t)DIAL_ENCODER_PIN_B, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+
+    M5Dial.Display.setBrightness(0);
+    M5Dial.Power.lightSleep(0, true);
+    return;
+  }
+
   // Wake screen if it's dimmed and user is active
-  if (isScreenDimmed && (now - lastActivityTime < INACTIVITY_TIMEOUT)) {
+  if (isScreenDimmed && inactiveTime < INACTIVITY_TIMEOUT) {
     M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
     isScreenDimmed = false;
   }
-  // Dim screen if inactive for too long (only when not running or alarming)
-  else if (!isScreenDimmed && (now - lastActivityTime > INACTIVITY_TIMEOUT) && mode == 0) {
+  // Dim screen if inactive for too long while in setup mode
+  else if (!isScreenDimmed && inactiveTime > INACTIVITY_TIMEOUT) {
     M5Dial.Display.setBrightness(DIM_BRIGHTNESS);
     isScreenDimmed = true;
   }
@@ -314,9 +355,9 @@ void loop() {
   }
 
   if (mode == 1) {
-    //timer counting, STOP button detection - any touch at bottom stops timer
+    // Timer counting: any touch on the screen stops the timer
     auto t = M5Dial.Touch.getDetail(); 
-    if (t.isPressed() && t.y > 160) {
+    if (t.isPressed()) {
       if (deb == 0) {  // Debounce
         M5Dial.Speaker.tone(3000, 100);
         stopAlarmAndReset();
@@ -336,6 +377,10 @@ void loop() {
   // Update activity timer and screen brightness
   if (userActive) {
     lastActivityTime = now;
+    isScreenDimmed = false;
+    if (mode == 0) {
+      M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+    }
   }
   updateScreenBrightness();
 
