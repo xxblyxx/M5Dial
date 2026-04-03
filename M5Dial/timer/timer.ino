@@ -59,7 +59,7 @@ void setup() {
 }
 
 void drawProgressBar() {
-  // Draw circular progress bar around screen edge (only during timer run mode)
+  // Draw filled circular progress bar around screen edge (only during timer run mode)
   if (mode != 1) return;
   
   unsigned long currentMillis = millis();
@@ -73,13 +73,20 @@ void drawProgressBar() {
   if (progress > 1.0) progress = 1.0;
   int progressAngle = (int)(progress * 360);
   
-  // Draw thin arc around the edge
-  uint16_t arcColor = 0x07E0;  // Green
-  for (int angle = 0; angle < progressAngle; angle += 5) {
+  // Draw filled progress bar around the edge, starting from 12 o'clock (top)
+  uint16_t barColor = 0x07E0;  // Green
+  int startAngle = 270;  // Start from 12 o'clock (top)
+  int endAngle = startAngle + progressAngle;
+  
+  // Draw thick bar by drawing concentric circles along the arc
+  for (int angle = startAngle; angle < endAngle; angle += 2) {
     float rad = angle * 3.14159 / 180.0;
-    int x = 120 + (int)(110 * cos(rad - 1.5708));
-    int y = 120 + (int)(110 * sin(rad - 1.5708));
-    img.fillCircle(x, y, 2, arcColor);
+    // Draw a segment of the bar at different radii to fill it in
+    for (int radius = 100; radius <= 115; radius += 2) {
+      int x = 120 + (int)(radius * cos(rad));
+      int y = 120 + (int)(radius * sin(rad));
+      img.drawPixel(x, y, barColor);
+    }
   }
 }
 
@@ -103,47 +110,38 @@ void draw() {
 
     // Play beep without blocking display loop (non-blocking tone)
     M5Dial.Speaker.tone(4000, 50);
+    delay(100);
     z = !z;
     if (z)
       img.fillSprite(WHITE);
     else
       img.fillSprite(BLACK);
-    img.setTextColor(RED, (z ? WHITE : BLACK));
-    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 8);
+    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
+
+    alarmStart = 1;
   } else {
     img.fillSprite(BLACK);
-    
-    // Top section - Title (compact layout)
-    img.fillRect(0, 0, 240, 40, 0x0A2D);
-    img.setTextColor(ORANGE, 0x0A2D);
-    img.setTextDatum(5);  // Middle center
-    img.drawString("BLY", 120, 15, 3);
-    img.drawString("POMODORO", 120, 30, 3);
-    
-    // Middle section - Timer display (large, centered)
-    img.setTextColor(WHITE, BLACK);
-    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 8);
-    
-    // Draw progress bar during Timer run
-    drawProgressBar();
-    
-    // Bottom section - Controls
-    img.fillRect(0, 160, 240, 80, 0x0A2D);
+    img.fillRect(0, 160, 240, 60, 0x0A2D);
+    img.fillRect(0, 0, 240, 80, 0x0A2D);
     img.setTextColor(WHITE, 0x0A2D);
-    
-    // Unit indicator (smaller, above button)
-    if (mode == 0) {
-      String unitNames[3] = {"HRS", "MIN", "SEC"};
-      img.drawString(unitNames[chosen], 120, 165, 2);
-      img.fillRect(50 + (chosen * 60), 175, 30, 3, GREEN);
-    }
-    
-    // Main action button (larger)
+    //img.drawString("START", 120, 190, 4);
     if (mode == 0)
       setActionButtonText("START");
     else if (mode == 1 || mode == 2)
+    {
       setActionButtonText("STOP");
+    }
+    img.setTextColor(ORANGE, BLACK);
     img.drawString("RESET", 120, 232, 2);
+    img.setTextColor(ORANGE, 0x0A2D);
+    img.drawString("BLY POMODORO", 120, 60, 4);
+    img.setTextColor(WHITE, BLACK);
+    if (mode == 0)
+      img.fillRect(14 + (chosen * 76), 150, 59, 4, GREEN);
+    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
+    
+    // Draw progress bar during Timer run
+    drawProgressBar();
   }
   img.pushSprite(0, 0);
 }
