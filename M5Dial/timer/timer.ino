@@ -14,18 +14,7 @@ int num[3] = { 0, 15, 0 };         // hours, min, sec; default starting timer
 int alarmTimerDuration = 15000;  //ms; length of alarm timer sounding, so we don't annoy the neighbors
 //***Configuarble options END
 
-
-void setup() {
-  auto cfg = M5.config();
-  M5Dial.begin(cfg, true, true);
-  M5Dial.Rtc.setDateTime({ { 2023, 10, 25 }, { 15, 56, 56 } });
-  M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
-  img.createSprite(240, 240);
-  img.setTextDatum(5);
-  lastActivityTime = millis();
-  delay(200);
-}
-
+// Global state variables
 long oldPosition;// = -999;
 int mode = 0;  // 0 is set, 1 is run, 3 is ringing
 int lastS = -999;
@@ -43,7 +32,7 @@ const uint8_t NORMAL_BRIGHTNESS = 128;
 const uint8_t DIM_BRIGHTNESS = 20;
 bool isScreenDimmed = false;
 
-
+// Display and UI
 String numS[3] = { "", "", "" };  ///same as num just String
 int mm[3] = { 24, 60, 60 };       // max value for hout, min , sec
 int chosen = 2;                   // chosen in array
@@ -57,6 +46,17 @@ Timer alarmTimer;
 long stopAlarmEncoderOldPos;  //tracks position of encoder when alarm sounds; allows us to turn encoder to stop
 int lastTimer[3] = { 0, 0, 0 };  //hours, minutes, seconds;  holds the last timer value
 
+
+void setup() {
+  auto cfg = M5.config();
+  M5Dial.begin(cfg, true, true);
+  M5Dial.Rtc.setDateTime({ { 2023, 10, 25 }, { 15, 56, 56 } });
+  M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+  img.createSprite(240, 240);
+  img.setTextDatum(5);
+  lastActivityTime = millis();
+  delay(200);
+}
 
 void drawProgressBar() {
   // Draw circular progress bar around screen edge (only during timer run mode)
