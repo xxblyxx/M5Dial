@@ -5,6 +5,8 @@ M5Canvas img(&M5Dial.Display);
 /* todo
 ✓ make the timer more accurate (now uses millis() for precise elapsed time tracking)
 ✓ when reset change to 15 minutes and 0 seconds as default
+✓ screen dimming on inactivity (dims after 30s, wakes on touch/button)
+✓ improved UI with centered timer, progress bar, better layout
 */
 
 //***Configuarble options START
@@ -17,9 +19,10 @@ void setup() {
   auto cfg = M5.config();
   M5Dial.begin(cfg, true, true);
   M5Dial.Rtc.setDateTime({ { 2023, 10, 25 }, { 15, 56, 56 } });
-  M5Dial.Display.setBrightness(24);
+  M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
   img.createSprite(240, 240);
   img.setTextDatum(5);
+  lastActivityTime = millis();
   delay(200);
 }
 
@@ -32,6 +35,13 @@ unsigned long timerStartMillis = 0;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastButtonPress = 0;  // Safety: prevent button debounce issues
 const unsigned long BUTTON_DEBOUNCE = 50;  // ms
+
+// Screen dimming for power savings
+unsigned long lastActivityTime = 0;
+const unsigned long INACTIVITY_TIMEOUT = 30000;  // 30 seconds
+const uint8_t NORMAL_BRIGHTNESS = 128;
+const uint8_t DIM_BRIGHTNESS = 20;
+bool isScreenDimmed = false;
 
 
 String numS[3] = { "", "", "" };  ///same as num just String
@@ -47,6 +57,31 @@ Timer alarmTimer;
 long stopAlarmEncoderOldPos;  //tracks position of encoder when alarm sounds; allows us to turn encoder to stop
 int lastTimer[3] = { 0, 0, 0 };  //hours, minutes, seconds;  holds the last timer value
 
+
+void drawProgressBar() {
+  // Draw circular progress bar around screen edge (only during timer run mode)
+  if (mode != 1) return;
+  
+  unsigned long currentMillis = millis();
+  unsigned long elapsedSeconds = (currentMillis - timerStartMillis) / 1000;
+  int totalSeconds = lastTimer[0] * 3600 + lastTimer[1] * 60 + lastTimer[2];
+  
+  if (totalSeconds <= 0) return;
+  
+  // Calculate progress angle (0-360 degrees)
+  float progress = (float)elapsedSeconds / totalSeconds;
+  if (progress > 1.0) progress = 1.0;
+  int progressAngle = (int)(progress * 360);
+  
+  // Draw thin arc around the edge
+  uint16_t arcColor = 0x07E0;  // Green
+  for (int angle = 0; angle < progressAngle; angle += 5) {
+    float rad = angle * 3.14159 / 180.0;
+    int x = 120 + (int)(110 * cos(rad - 1.5708));
+    int y = 120 + (int)(110 * sin(rad - 1.5708));
+    img.fillCircle(x, y, 2, arcColor);
+  }
+}
 
 void draw() {
   if (mode == 3) {
@@ -73,29 +108,59 @@ void draw() {
       img.fillSprite(WHITE);
     else
       img.fillSprite(BLACK);
-    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
+    img.setTextColor(RED, (z ? WHITE : BLACK));
+    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 8);
   } else {
     img.fillSprite(BLACK);
-    img.fillRect(0, 160, 240, 60, 0x0A2D);
-    img.fillRect(0, 0, 240, 80, 0x0A2D);
+    
+    // Top section - Title (compact layout)
+    img.fillRect(0, 0, 240, 40, 0x0A2D);
+    img.setTextColor(ORANGE, 0x0A2D);
+    img.setTextDatum(5);  // Middle center
+    img.drawString("BLY", 120, 15, 3);
+    img.drawString("POMODORO", 120, 30, 3);
+    
+    // Middle section - Timer display (large, centered)
+    img.setTextColor(WHITE, BLACK);
+    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 8);
+    
+    // Draw progress bar during Timer run
+    drawProgressBar();
+    
+    // Bottom section - Controls
+    img.fillRect(0, 160, 240, 80, 0x0A2D);
     img.setTextColor(WHITE, 0x0A2D);
-    //img.drawString("START", 120, 190, 4);
+    
+    // Unit indicator (smaller, above button)
+    if (mode == 0) {
+      String unitNames[3] = {"HRS", "MIN", "SEC"};
+      img.drawString(unitNames[chosen], 120, 165, 2);
+      img.fillRect(50 + (chosen * 60), 175, 30, 3, GREEN);
+    }
+    
+    // Main action button (larger)
     if (mode == 0)
       setActionButtonText("START");
     else if (mode == 1 || mode == 2)
-    {
       setActionButtonText("STOP");
-    }
-    img.setTextColor(ORANGE, BLACK);
     img.drawString("RESET", 120, 232, 2);
-    img.setTextColor(ORANGE, 0x0A2D);
-    img.drawString("BLY POMODORO", 120, 60, 4);
-    img.setTextColor(WHITE, BLACK);
-    if (mode == 0)
-      img.fillRect(14 + (chosen * 76), 150, 59, 4, GREEN);
-    img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
   }
   img.pushSprite(0, 0);
+}
+
+void updateScreenBrightness() {
+  unsigned long now = millis();
+  
+  // Wake screen if it's dimmed and user is active
+  if (isScreenDimmed && (now - lastActivityTime < INACTIVITY_TIMEOUT)) {
+    M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+    isScreenDimmed = false;
+  }
+  // Dim screen if inactive for too long (only when not running or alarming)
+  else if (!isScreenDimmed && (now - lastActivityTime > INACTIVITY_TIMEOUT) && mode == 0) {
+    M5Dial.Display.setBrightness(DIM_BRIGHTNESS);
+    isScreenDimmed = true;
+  }
 }
 
 void updateTime() {
@@ -151,12 +216,16 @@ void loop() {
 
   M5Dial.update();
   unsigned long now = millis();
+  
+  // Track user activity for screen dimming
+  bool userActive = false;
 
   // Emergency reset - always available, even if stuck
   if (M5Dial.BtnA.isPressed()) {
     if (now - lastButtonPress > BUTTON_DEBOUNCE) {
       stopAlarmAndReset();
       lastButtonPress = now;
+      userActive = true;
     }
   }
 
@@ -175,6 +244,7 @@ void loop() {
   if (mode == 0) {
     auto t = M5Dial.Touch.getDetail();
     if (t.isPressed()) {
+      userActive = true;  // Track touchscreen activity
       if (deb == 0) {
         deb = 1;
         M5Dial.Speaker.tone(3000, 100);
@@ -198,6 +268,7 @@ void loop() {
 
     long newPosition = M5Dial.Encoder.read();
     if (newPosition != oldPosition) {
+      userActive = true;  // Track encoder activity
       M5Dial.Speaker.tone(3600, 30);
       if (newPosition > oldPosition) num[chosen]++;
       else num[chosen]--;
@@ -226,6 +297,12 @@ void loop() {
   for (int i = 0; i < 3; i++)
     if (num[i] < 10) numS[i] = "0" + String(num[i]);
     else numS[i] = String(num[i]);
+  
+  // Update activity timer and screen brightness
+  if (userActive) {
+    lastActivityTime = now;
+  }
+  updateScreenBrightness();
 
   draw();
 }
