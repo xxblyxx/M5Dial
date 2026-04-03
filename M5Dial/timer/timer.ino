@@ -3,14 +3,12 @@
 M5Canvas img(&M5Dial.Display);
 
 /* todo
-x timer set to only go off for 30 seconds
-- any action stops timer when going off
-- any action stops timer from counting down
-n/a - think about maybe adding a motion detection to stop alarm from sounding; no hardware available
+✓ make the timer more accurate (now uses millis() for precise elapsed time tracking)
+✓ when reset change to 15 minutes and 0 seconds as default
 */
 
 //***Configuarble options START
-int num[3] = { 0, 20, 0 };         // hours, min, secx; default starting timer
+int num[3] = { 0, 15, 0 };         // hours, min, sec; default starting timer
 int alarmTimerDuration = 15000;  //ms; length of alarm timer sounding, so we don't annoy the neighbors
 //***Configuarble options END
 
@@ -26,8 +24,14 @@ void setup() {
 }
 
 long oldPosition;// = -999;
-int mode = 0;  // 0 is set, 1 ir run , 3 is ringing
+int mode = 0;  // 0 is set, 1 is run, 3 is ringing
 int lastS = -999;
+
+// Timer accuracy tracking
+unsigned long timerStartMillis = 0;
+unsigned long lastDisplayUpdate = 0;
+unsigned long lastButtonPress = 0;  // Safety: prevent button debounce issues
+const unsigned long BUTTON_DEBOUNCE = 50;  // ms
 
 
 String numS[3] = { "", "", "" };  ///same as num just String
@@ -41,7 +45,6 @@ bool deb2 = 0;
 bool alarmStart = 0;
 Timer alarmTimer;
 long stopAlarmEncoderOldPos;  //tracks position of encoder when alarm sounds; allows us to turn encoder to stop
-bool isScreenPressed=0; //track if the screen is pressed; allows for us to simulate a button press
 int lastTimer[3] = { 0, 0, 0 };  //hours, minutes, seconds;  holds the last timer value
 
 
@@ -52,27 +55,25 @@ void draw() {
     {
       stopAlarmEncoderOldPos = M5Dial.Encoder.read();
       alarmTimer.start();
+      alarmStart = 1;  // Mark alarm as started immediately
     }
 
-    if (alarmStart == 1) {
-      if (alarmTimer.read() > alarmTimerDuration) {
-        alarmTimer.stop();
-        reset();
-        delay(200);
-        return;
-      }
+    // Auto-stop alarm after duration
+    if (alarmTimer.read() > alarmTimerDuration) {
+      alarmTimer.stop();
+      reset();
+      delay(200);
+      return;
     }
 
-    M5Dial.Speaker.tone(4000, 100);
-    delay(100);
+    // Play beep without blocking display loop (non-blocking tone)
+    M5Dial.Speaker.tone(4000, 50);
     z = !z;
     if (z)
       img.fillSprite(WHITE);
     else
       img.fillSprite(BLACK);
     img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 120, 7);
-
-    alarmStart = 1;
   } else {
     img.fillSprite(BLACK);
     img.fillRect(0, 160, 240, 60, 0x0A2D);
@@ -98,23 +99,29 @@ void draw() {
 }
 
 void updateTime() {
-  if (num[0] <= 0 && num[1] <= 0 && num[2] <= 0 && mode == 1)
-    mode = 3;
-
-  auto dt = M5Dial.Rtc.getDateTime();
-  if (lastS != dt.time.seconds) {
-    num[2]--;
-    lastS = dt.time.seconds;
-
-    if (num[2] < 0) {
-      num[1]--;
-      num[2] = mm[2] - 1;
+  // Use elapsed milliseconds for accurate timing
+  unsigned long currentMillis = millis();
+  unsigned long elapsedSeconds = (currentMillis - timerStartMillis) / 1000;
+  
+  // Update display every second (1000ms) for efficiency
+  if (currentMillis - lastDisplayUpdate >= 1000) {
+    int totalSeconds = lastTimer[0] * 3600 + lastTimer[1] * 60 + lastTimer[2];
+    int remainingSeconds = totalSeconds - elapsedSeconds;
+    
+    if (remainingSeconds <= 0) {
+      num[0] = 0;
+      num[1] = 0;
+      num[2] = 0;
+      if (mode == 1) mode = 3;  // Transition to alarm after expiration
+    } else {
+      num[0] = remainingSeconds / 3600;
+      num[1] = (remainingSeconds % 3600) / 60;
+      num[2] = remainingSeconds % 60;
     }
-    if (num[1] < 0) {
-      num[0]--;
-      num[1] = mm[1] - 1;
-    }
+    
+    lastDisplayUpdate = currentMillis;
   }
+  
   //encoder spun, stop timer countdown
   long stopAlarmEncoderNewPos = M5Dial.Encoder.read();
   if (stopAlarmEncoderOldPos != stopAlarmEncoderNewPos)
@@ -122,13 +129,11 @@ void updateTime() {
 }
 
 void reset() {
+  //always resets to 15 minutes, 0 seconds; allows for quick reset to common pomodoro time
   mode = 0;
-  // num[2]=15;
-  // num[1]=0;
-  // num[0]=0;
-  num[2] = lastTimer[2];
-  num[1] = lastTimer[1];
-  num[0] = lastTimer[0];
+  num[0] = 0;
+  num[1] = 15;
+  num[2] = 0;
   alarmStart = 0;
 }
 
@@ -145,18 +150,18 @@ void setActionButtonText(String buttonText) {
 void loop() {
 
   M5Dial.update();
-  auto x = M5Dial.Touch.getDetail();
-  if (x.isReleased())
-  {
-    isScreenPressed = 0;
-  }
+  unsigned long now = millis();
 
+  // Emergency reset - always available, even if stuck
   if (M5Dial.BtnA.isPressed()) {
-    stopAlarmAndReset();
+    if (now - lastButtonPress > BUTTON_DEBOUNCE) {
+      stopAlarmAndReset();
+      lastButtonPress = now;
+    }
   }
 
   //alarm active, disable alarm if dial or screen is touched
-  if (mode == 3 and alarmStart == 1) {
+  if (mode == 3 && alarmStart == 1) {
     //screen touched
     auto t = M5Dial.Touch.getDetail();
     if (t.isPressed())
@@ -175,9 +180,12 @@ void loop() {
         M5Dial.Speaker.tone(3000, 100);
         if (t.y > 160) {
           mode = 1;  //start pressed
-          isScreenPressed = 1;
           stopAlarmEncoderOldPos = M5Dial.Encoder.read();
-          lastTimer[chosen] = num[chosen];  //saves the chosen time to lastimer
+          lastTimer[0] = num[0];  //saves the chosen time
+          lastTimer[1] = num[1];
+          lastTimer[2] = num[2];
+          timerStartMillis = millis();  //start tracking elapsed time
+          lastDisplayUpdate = millis();
           sleep(0.200);
         };
         if (t.y > 86 && t.y < 150) {
@@ -200,17 +208,16 @@ void loop() {
   }
 
   if (mode == 1) {
-    //TODO not working...the touch is still recognized
-    // auto t = M5Dial.Touch.getDetail(); //stop alarm when screen is pressed
-    // if (t.isPressed())
-    //   stopAlarmAndReset();
-    // else
-
-    //timer counting, STOP button detection
+    //timer counting, STOP button detection - any touch at bottom stops timer
     auto t = M5Dial.Touch.getDetail(); 
-    if (t.isPressed() && isScreenPressed == 0 && t.y > 160) {
-      M5Dial.Speaker.tone(3000, 100);
-      stopAlarmAndReset();
+    if (t.isPressed() && t.y > 160) {
+      if (deb == 0) {  // Debounce
+        M5Dial.Speaker.tone(3000, 100);
+        stopAlarmAndReset();
+        deb = 1;
+      }
+    } else {
+      deb = 0;  // Allow next press
     }
 
     updateTime();
