@@ -14,8 +14,8 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Multiple Stop Methods**: Stop alarm by touching screen, rotating encoder, or pressing Button A
 - **Auto Reset**: Alarm auto-stops after 15 seconds and returns to setup screen
 - **Responsive Controls**: Non-blocking audio and improved debouncing prevents input lockups
-- **Power Saving**: Dims after 30 seconds of setup inactivity, enters light sleep after 1 hour; touch, Button A, or the encoder wake it back up
-- **Configuration Menu**: Long-hold Button A from the setup screen to edit power saving and the default reset timer
+- **Power Saving**: Dims after a configurable timeout and enters light sleep after a configurable timeout; touch, Button A, or the encoder wake it back up
+- **Configuration Menu**: Long-hold Button A from the setup screen to step through dim, sleep, and default timer pages
 
 ## Hardware Requirements
 
@@ -48,6 +48,7 @@ A Pomodoro timer application for the **M5Dial** smart rotary device. Features pr
 - **Touch Top/Middle**: Switch between time units (green indicator shows current)
 - **Touch Bottom (Setup)**: Start timer
 - **Button A Hold (Setup)**: Open configuration menu
+- **Button A Click (CFG)**: Advance to the next config page
 - **Touch Anywhere (Running)**: Stop and return to setup
 - **Touch/Rotate (Alarm)**: Stop alarm and return to setup
 - **Button A**: Emergency reset (always available)
@@ -102,12 +103,16 @@ const unsigned long BUTTON_DEBOUNCE = 50;  // Button debounce window (ms)
 ┌─────────────────────────┐
 │          CFG            │
 ├─────────────────────────┤
-│ [ ] DIM    [ ] SLEEP    │
+│ [ ] DIM                 │
+│      00:00:30           │
 │                         │
-│        DEFAULT          │
+│ [ ] SLEEP               │
+│      01:00:00           │
+│                         │
+│     DEFAULT TIMER       │
 │      00:15:00           │
 ├─────────────────────────┤
-│          SAVE           │
+│     NEXT / DONE         │
 └─────────────────────────┘
 ```
 

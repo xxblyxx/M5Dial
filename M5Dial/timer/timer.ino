@@ -51,20 +51,22 @@ const unsigned long DOUBLE_CLICK_TIMEOUT = 500;  // ms
 
 // Screen dimming for power savings
 unsigned long lastActivityTime = 0;
-const unsigned long INACTIVITY_TIMEOUT = 30000;  // 30 seconds
-const unsigned long LIGHT_SLEEP_TIMEOUT = 60000;//3600000;  // 1 hour
 const uint8_t NORMAL_BRIGHTNESS = 128;
 const uint8_t DIM_BRIGHTNESS = 5;
 bool isScreenDimmed = false;
 bool screenDimmingEnabled = true;
 bool lightSleepEnabled = true;
+unsigned long dimTimeoutMillis = 30000;
+unsigned long lightSleepTimeoutMillis = 3600000;
 
 // Display and UI
 String numS[3] = { "", "", "" };  ///same as num just String
 int mm[3] = { 24, 60, 60 };       // max value for hout, min , sec
 int chosen = 2;                   // chosen in array
-int configChosen = 2;
+int configPage = 0;
 int defaultTimer[3] = { 0, 15, 0 };
+int dimTimeout[3] = { 0, 0, 30 };
+int sleepTimeout[3] = { 1, 0, 0 };
 
 bool z = 0;
 bool deb = 0;
@@ -85,9 +87,17 @@ void setup() {
   prefs.begin("pomodoro", false);
   screenDimmingEnabled = prefs.getBool("dim_en", true);
   lightSleepEnabled = prefs.getBool("sleep_en", true);
+  dimTimeout[0] = prefs.getUChar("dim_h", dimTimeout[0]);
+  dimTimeout[1] = prefs.getUChar("dim_m", dimTimeout[1]);
+  dimTimeout[2] = prefs.getUChar("dim_s", dimTimeout[2]);
+  sleepTimeout[0] = prefs.getUChar("sleep_h", sleepTimeout[0]);
+  sleepTimeout[1] = prefs.getUChar("sleep_m", sleepTimeout[1]);
+  sleepTimeout[2] = prefs.getUChar("sleep_s", sleepTimeout[2]);
   defaultTimer[0] = prefs.getUChar("def_h", 0);
   defaultTimer[1] = prefs.getUChar("def_m", 15);
   defaultTimer[2] = prefs.getUChar("def_s", 0);
+  dimTimeoutMillis = (unsigned long)dimTimeout[0] * 3600000UL + (unsigned long)dimTimeout[1] * 60000UL + (unsigned long)dimTimeout[2] * 1000UL;
+  lightSleepTimeoutMillis = (unsigned long)sleepTimeout[0] * 3600000UL + (unsigned long)sleepTimeout[1] * 60000UL + (unsigned long)sleepTimeout[2] * 1000UL;
   for (int i = 0; i < 3; i++) {
     num[i] = defaultTimer[i];
   }
@@ -101,9 +111,54 @@ void setup() {
 void saveConfig() {
   prefs.putBool("dim_en", screenDimmingEnabled);
   prefs.putBool("sleep_en", lightSleepEnabled);
+  prefs.putUChar("dim_h", dimTimeout[0]);
+  prefs.putUChar("dim_m", dimTimeout[1]);
+  prefs.putUChar("dim_s", dimTimeout[2]);
+  prefs.putUChar("sleep_h", sleepTimeout[0]);
+  prefs.putUChar("sleep_m", sleepTimeout[1]);
+  prefs.putUChar("sleep_s", sleepTimeout[2]);
   prefs.putUChar("def_h", defaultTimer[0]);
   prefs.putUChar("def_m", defaultTimer[1]);
   prefs.putUChar("def_s", defaultTimer[2]);
+}
+
+unsigned long timeArrayToMillis(const int timeValue[3]) {
+  return (unsigned long)timeValue[0] * 3600000UL + (unsigned long)timeValue[1] * 60000UL + (unsigned long)timeValue[2] * 1000UL;
+}
+
+void storeCurrentConfigPage() {
+  if (configPage == 0) {
+    dimTimeout[0] = num[0];
+    dimTimeout[1] = num[1];
+    dimTimeout[2] = num[2];
+    dimTimeoutMillis = timeArrayToMillis(dimTimeout);
+  } else if (configPage == 1) {
+    sleepTimeout[0] = num[0];
+    sleepTimeout[1] = num[1];
+    sleepTimeout[2] = num[2];
+    lightSleepTimeoutMillis = timeArrayToMillis(sleepTimeout);
+  } else {
+    defaultTimer[0] = num[0];
+    defaultTimer[1] = num[1];
+    defaultTimer[2] = num[2];
+  }
+  saveConfig();
+}
+
+void loadConfigPage(int page) {
+  if (page == 0) {
+    num[0] = dimTimeout[0];
+    num[1] = dimTimeout[1];
+    num[2] = dimTimeout[2];
+  } else if (page == 1) {
+    num[0] = sleepTimeout[0];
+    num[1] = sleepTimeout[1];
+    num[2] = sleepTimeout[2];
+  } else {
+    num[0] = defaultTimer[0];
+    num[1] = defaultTimer[1];
+    num[2] = defaultTimer[2];
+  }
 }
 
 void syncTimerToDefault() {
@@ -114,23 +169,9 @@ void syncTimerToDefault() {
 
 void enterConfigMenu() {
   mode = 4;
-  configChosen = 2;
-  syncTimerToDefault();
-  chosen = configChosen;
-  oldPosition = M5Dial.Encoder.read();
-  lastActivityTime = millis();
-  isScreenDimmed = false;
-  M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
-}
-
-void exitConfigMenu() {
-  for (int i = 0; i < 3; i++) {
-    defaultTimer[i] = num[i];
-  }
-  saveConfig();
-  mode = 0;
+  configPage = 0;
+  loadConfigPage(configPage);
   chosen = 2;
-  syncTimerToDefault();
   oldPosition = M5Dial.Encoder.read();
   lastActivityTime = millis();
   isScreenDimmed = false;
@@ -156,6 +197,29 @@ bool isSetupMode() {
 void setCurrentTimerToDefault() {
   syncTimerToDefault();
   chosen = 2;
+}
+
+void exitConfigMenu() {
+  storeCurrentConfigPage();
+  mode = 0;
+  syncTimerToDefault();
+  chosen = 2;
+  oldPosition = M5Dial.Encoder.read();
+  lastActivityTime = millis();
+  isScreenDimmed = false;
+  M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+}
+
+void advanceConfigPage() {
+  storeCurrentConfigPage();
+  if (configPage >= 2) {
+    exitConfigMenu();
+    return;
+  }
+  configPage++;
+  loadConfigPage(configPage);
+  chosen = 2;
+  oldPosition = M5Dial.Encoder.read();
 }
 
 void adjustTimerValue(int direction, int target[3], int targetChosen) {
@@ -248,17 +312,25 @@ void drawConfigScreen() {
   img.setTextColor(ORANGE, BLACK);
   img.drawString("CFG", 120, 14, 2);
 
-  drawCheckboxRow(26, 43, screenDimmingEnabled, "DIM");
-  drawCheckboxRow(132, 43, lightSleepEnabled, "SLEEP");
+  if (configPage == 0) {
+    drawCheckboxRow(26, 43, screenDimmingEnabled, "DIM");
+    img.setTextColor(ORANGE, BLACK);
+    img.drawString("DIM TIMEOUT", 120, 83, 1);
+  } else if (configPage == 1) {
+    drawCheckboxRow(132, 43, lightSleepEnabled, "SLEEP");
+    img.setTextColor(ORANGE, BLACK);
+    img.drawString("SLEEP TIMEOUT", 120, 83, 1);
+  } else {
+    img.setTextColor(ORANGE, BLACK);
+    img.drawString("DEFAULT TIMER", 120, 83, 1);
+  }
 
-  img.setTextColor(ORANGE, BLACK);
-  img.drawString("DEFAULT", 120, 83, 1);
   img.setTextColor(WHITE, BLACK);
   img.drawString(numS[0] + ":" + numS[1] + ":" + numS[2], 120, 121, 7);
 
-  img.fillRect(14 + (configChosen * 76), 147, 59, 4, GREEN);
+  img.fillRect(14 + (chosen * 76), 147, 59, 4, GREEN);
   img.setTextColor(WHITE, 0x0A2D);
-  img.drawString("SAVE", 120, 220, 2);
+  img.drawString(configPage < 2 ? "NEXT" : "DONE", 120, 220, 2);
 }
 
 void draw() {
@@ -316,7 +388,7 @@ void updateScreenBrightness() {
   }
 
   // After a long idle period, enter light sleep so touch/button/encoder can wake it.
-  if (lightSleepEnabled && inactiveTime >= LIGHT_SLEEP_TIMEOUT) {
+  if (lightSleepEnabled && inactiveTime >= lightSleepTimeoutMillis) {
     gpio_wakeup_enable(GPIO_NUM_42, GPIO_INTR_LOW_LEVEL);  // Button A
     gpio_wakeup_enable((gpio_num_t)DIAL_ENCODER_PIN_A, GPIO_INTR_LOW_LEVEL);
     gpio_wakeup_enable((gpio_num_t)DIAL_ENCODER_PIN_B, GPIO_INTR_LOW_LEVEL);
@@ -328,12 +400,12 @@ void updateScreenBrightness() {
   }
 
   // Wake screen if it's dimmed and user is active
-  if (isScreenDimmed && inactiveTime < INACTIVITY_TIMEOUT) {
+  if (isScreenDimmed && inactiveTime < dimTimeoutMillis) {
     M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
     isScreenDimmed = false;
   }
-  // Dim screen if inactive for too long while in setup mode
-  else if (screenDimmingEnabled && !isScreenDimmed && inactiveTime > INACTIVITY_TIMEOUT) {
+  // Dim screen if inactive for too long while in setup/config mode.
+  else if (screenDimmingEnabled && !isScreenDimmed && inactiveTime > dimTimeoutMillis) {
     M5Dial.Display.setBrightness(DIM_BRIGHTNESS);
     isScreenDimmed = true;
   }
@@ -408,58 +480,89 @@ void loop() {
   // Track user activity for screen dimming
   bool userActive = false;
 
-  // Emergency reset with double-click detection - always available, even if stuck
-  if (M5Dial.BtnA.wasHold()) {
+  // Enter config menu from a long hold while on the setup screen.
+  if (!isConfigMode() && M5Dial.BtnA.wasHold() && mode == 0) {
     resetHoldConsumed = true;
     resetButtonPressed = false;
     lastResetButtonTime = 0;
     lastButtonPress = now;
     userActive = true;
     M5Dial.Speaker.tone(3200, 80);
-    if (mode == 0) {
-      enterConfigMenu();
-    }
+    enterConfigMenu();
   }
 
-  if (M5Dial.BtnA.isPressed() && !resetHoldConsumed) {
-    if (!resetButtonPressed && (now - lastButtonPress > BUTTON_DEBOUNCE)) {
-      resetButtonPressed = true;
-      
-      // Check if this is a double click
-      if (now - lastResetButtonTime <= DOUBLE_CLICK_TIMEOUT) {
-        // Double click detected - reset to configured default timer
-        M5Dial.Speaker.tone(2800, 100);
-        resetToDefaultTimer();
-        delay(200);
-        lastResetButtonTime = 0;  // Reset for next sequence
-      } else {
-        // First click of new sequence - restore to last timer value
-        M5Dial.Speaker.tone(2800, 100);
-        resetToLastTimer();
-        delay(200);
-        lastResetButtonTime = now;
-      }
-
-      lastButtonPress = now;
+  if (isConfigMode()) {
+    if (M5Dial.BtnA.wasClicked()) {
       userActive = true;
+      M5Dial.Speaker.tone(2800, 80);
+      advanceConfigPage();
+      delay(120);
+    }
+
+    auto t = M5Dial.Touch.getDetail();
+    if (t.isPressed()) {
+      userActive = true;
+      if (deb == 0) {
+        deb = 1;
+        M5Dial.Speaker.tone(3000, 80);
+        if (configPage == 0 && t.y > 34 && t.y < 66 && t.x > 16 && t.x < 112) {
+          screenDimmingEnabled = !screenDimmingEnabled;
+          storeCurrentConfigPage();
+          if (!screenDimmingEnabled) {
+            M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
+            isScreenDimmed = false;
+          }
+        } else if (configPage == 1 && t.y > 34 && t.y < 66 && t.x > 132 && t.x < 224) {
+          lightSleepEnabled = !lightSleepEnabled;
+          storeCurrentConfigPage();
+        } else if (t.y > 86 && t.y < 150) {
+          if (t.x > 10 && t.x < 90) chosen = 0;
+          if (t.x > 90 && t.x < 166) chosen = 1;
+          if (t.x > 166 && t.x < 224) chosen = 2;
+        }
+      }
+    } else {
+      deb = 0;
+    }
+
+    long newPosition = M5Dial.Encoder.read();
+    if (newPosition != oldPosition) {
+      userActive = true;
+      M5Dial.Speaker.tone(3600, 30);
+      adjustTimerValue(newPosition > oldPosition ? 1 : -1, num, chosen);
+      oldPosition = newPosition;
+      storeCurrentConfigPage();
     }
   } else {
-    resetButtonPressed = false;  // Button released
-    if (!M5Dial.BtnA.isPressed()) {
-      resetHoldConsumed = false;
-    }
-  }
+    // Emergency reset with double-click detection - always available, even if stuck
+    if (M5Dial.BtnA.isPressed() && !resetHoldConsumed) {
+      if (!resetButtonPressed && (now - lastButtonPress > BUTTON_DEBOUNCE)) {
+        resetButtonPressed = true;
+        
+        // Check if this is a double click
+        if (now - lastResetButtonTime <= DOUBLE_CLICK_TIMEOUT) {
+          // Double click detected - reset to configured default timer
+          M5Dial.Speaker.tone(2800, 100);
+          resetToDefaultTimer();
+          delay(200);
+          lastResetButtonTime = 0;  // Reset for next sequence
+        } else {
+          // First click of new sequence - restore to last timer value
+          M5Dial.Speaker.tone(2800, 100);
+          resetToLastTimer();
+          delay(200);
+          lastResetButtonTime = now;
+        }
 
-  //alarm active, disable alarm if dial or screen is touched
-  if (isAlarmMode() && alarmStart == 1) {
-    //screen touched
-    auto t = M5Dial.Touch.getDetail();
-    if (t.isPressed())
-      stopAlarmAndReset();
-    //encoder spun
-    long stopAlarmEncoderNewPos = M5Dial.Encoder.read();
-    if (stopAlarmEncoderOldPos != stopAlarmEncoderNewPos)
-      stopAlarmAndReset();
+        lastButtonPress = now;
+        userActive = true;
+      }
+    } else {
+      resetButtonPressed = false;  // Button released
+      if (!M5Dial.BtnA.isPressed()) {
+        resetHoldConsumed = false;
+      }
+    }
   }
 
   if (mode == 0) {
@@ -487,55 +590,25 @@ void loop() {
       }
     } else deb = 0;
 
-    if (mode == 0) {
-      long newPosition = M5Dial.Encoder.read();
-      if (newPosition != oldPosition) {
-        userActive = true;  // Track encoder activity
-        M5Dial.Speaker.tone(3600, 30);
-        adjustTimerValue(newPosition > oldPosition ? 1 : -1, num, chosen);
-        oldPosition = newPosition;
-      }
+    long newPosition = M5Dial.Encoder.read();
+    if (newPosition != oldPosition) {
+      userActive = true;  // Track encoder activity
+      M5Dial.Speaker.tone(3600, 30);
+      adjustTimerValue(newPosition > oldPosition ? 1 : -1, num, chosen);
+      oldPosition = newPosition;
     }
   }
 
-  if (mode == 4) {
+  //alarm active, disable alarm if dial or screen is touched
+  if (isAlarmMode() && alarmStart == 1) {
+    //screen touched
     auto t = M5Dial.Touch.getDetail();
-    if (t.isPressed()) {
-      userActive = true;
-      if (deb == 0) {
-        deb = 1;
-        M5Dial.Speaker.tone(3000, 80);
-        if (t.y > 60 && t.y < 90) {
-          if (t.x > 16 && t.x < 96) {
-            screenDimmingEnabled = !screenDimmingEnabled;
-            if (!screenDimmingEnabled) {
-              M5Dial.Display.setBrightness(NORMAL_BRIGHTNESS);
-              isScreenDimmed = false;
-            }
-          } else if (t.x > 132 && t.x < 220) {
-            lightSleepEnabled = !lightSleepEnabled;
-          }
-        } else if (t.y > 112 && t.y < 178) {
-          if (t.x > 10 && t.x < 90) configChosen = 0;
-          if (t.x > 90 && t.x < 166) configChosen = 1;
-          if (t.x > 166 && t.x < 224) configChosen = 2;
-        } else if (t.y > 204) {
-          exitConfigMenu();
-        }
-      }
-    } else {
-      deb = 0;
-    }
-
-    if (mode == 4) {
-      long newPosition = M5Dial.Encoder.read();
-      if (newPosition != oldPosition) {
-        userActive = true;
-        M5Dial.Speaker.tone(3600, 30);
-        adjustTimerValue(newPosition > oldPosition ? 1 : -1, num, configChosen);
-        oldPosition = newPosition;
-      }
-    }
+    if (t.isPressed())
+      stopAlarmAndReset();
+    //encoder spun
+    long stopAlarmEncoderNewPos = M5Dial.Encoder.read();
+    if (stopAlarmEncoderOldPos != stopAlarmEncoderNewPos)
+      stopAlarmAndReset();
   }
 
   if (isRunMode()) {
