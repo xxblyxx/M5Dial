@@ -1,6 +1,7 @@
 #include <M5Dial.h>
 #include "Timer.h"
 #define LV_TICK_CUSTOM 1
+#include "lv_conf.h"
 #include <lvgl.h>
 #include <driver/gpio.h>
 #include <esp_sleep.h>
@@ -66,19 +67,12 @@ int g_last_saved_timer[3] = { 0, 0, 0 };
 Preferences prefs;
 
 // --- UI Component Pointers ---
-static lv_obj_t *uiTitle = nullptr;
-static lv_obj_t *uiTimer = nullptr;
-static lv_obj_t *uiSubtitle = nullptr;
 static lv_obj_t *uiAction = nullptr;
-static lv_obj_t *uiActionLabel = nullptr;
-static lv_obj_t *uiReset = nullptr;
 static lv_obj_t *uiSelected = nullptr;
 static lv_obj_t *uiProgress = nullptr;
-static lv_obj_t *uiConfigTitle = nullptr;
-static lv_obj_t *uiConfigHint = nullptr;
 static lv_obj_t *uiConfigAction = nullptr;
-static lv_obj_t *uiConfigActionLabel = nullptr;
-static lv_obj_t *uiConfigToggle = nullptr;
+static lv_obj_t *uiConfigToggleOutline = nullptr;
+static lv_obj_t *uiConfigToggleFill = nullptr;
 static lv_obj_t *uiAlarmBanner = nullptr;
 
 // --- Internal Flags ---
@@ -145,13 +139,43 @@ static const lv_color_t STAR_TEXT = lv_color_hex(0xF1E9DB);
 static const lv_color_t STAR_MUTED = lv_color_hex(0x8C98AC);
 static const lv_color_t STAR_DARK = lv_color_hex(0x0B1019);
 
-static void setLabelZoom(lv_obj_t *label, lv_coord_t zoom) {
-  if (label != nullptr) {
-    // Transform zoom can clip label glyphs on this LVGL/M5Dial combo.
-    // Keep the call sites, but render the text at native size so it stays visible.
-    (void)zoom;
-  }
+static constexpr int TFT_FONT_SMALL = 1;
+static constexpr int TFT_FONT_MEDIUM = 2;
+static constexpr int TFT_FONT_LARGE = 4;
+static constexpr int TFT_FONT_TIMER = 7;
+
+static constexpr uint16_t rgb888To565(uint32_t color) {
+  return ((color & 0x00F80000) >> 8)
+       | ((color & 0x0000FC00) >> 5)
+       | ((color & 0x000000F8) >> 3);
 }
+
+static constexpr uint16_t STAR_BG_565 = rgb888To565(0x04070F);
+static constexpr uint16_t STAR_PANEL_565 = rgb888To565(0x16233A);
+static constexpr uint16_t STAR_PANEL_2_565 = rgb888To565(0x273247);
+static constexpr uint16_t STAR_AMBER_565 = rgb888To565(0xFF9A2E);
+static constexpr uint16_t STAR_CYAN_565 = rgb888To565(0x58E8FF);
+static constexpr uint16_t STAR_GREEN_565 = rgb888To565(0x78F1A7);
+static constexpr uint16_t STAR_RED_565 = rgb888To565(0xFF5A4F);
+static constexpr uint16_t STAR_TEXT_565 = rgb888To565(0xF1E9DB);
+static constexpr uint16_t STAR_MUTED_565 = rgb888To565(0x8C98AC);
+static constexpr uint16_t STAR_DARK_565 = rgb888To565(0x0B1019);
+
+static void drawBuiltinText(const String &text, int x, int y, int font, uint16_t fg, uint16_t bg) {
+  M5Dial.Display.setTextColor(fg, bg);
+  M5Dial.Display.drawString(text, x, y, font);
+}
+
+static void drawBuiltinText(const char *text, int x, int y, int font, uint16_t fg, uint16_t bg) {
+  M5Dial.Display.setTextColor(fg, bg);
+  M5Dial.Display.drawString(text, x, y, font);
+}
+
+void renderSetupTextOverlay();
+void renderRunningTextOverlay();
+void renderConfigTextOverlay();
+void renderAlarmTextOverlay();
+void renderTextOverlay();
 
 // --- Function Prototypes ---
 void saveConfig();
@@ -172,7 +196,6 @@ void updateNumStrings();
 void formatTimeText(char *out, size_t outLen, const int value[3]);
 void setCommonScreenStyle(lv_obj_t *scr);
 lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t color, int radius = 14);
-lv_obj_t *createTextLabel(lv_obj_t *parent, const char *text, const lv_font_t *font, lv_color_t color);
 void syncSetupUi();
 void syncRunningUi();
 void syncConfigUi();
@@ -332,34 +355,11 @@ lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t c
   return obj;
 }
 
-lv_obj_t *createTextLabel(lv_obj_t *parent, const char *text, const lv_font_t *font, lv_color_t color) {
-  lv_obj_t *label = lv_label_create(parent);
-  lv_label_set_text(label, text);
-  lv_obj_set_style_text_font(label, font, 0);
-  lv_obj_set_style_text_color(label, color, 0);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  return label;
-}
-
 void syncSetupUi() {
-  char timeText[16];
-  formatTimeText(timeText, sizeof(timeText), num);
-  lv_label_set_text(uiTimer, timeText);
-  lv_label_set_text(uiTitle, "BLY POMODORO");
-  lv_label_set_text(uiSubtitle, "STARFLEET TIMELINE");
-  lv_label_set_text(uiActionLabel, "START");
-  lv_label_set_text(uiReset, "RESET");
   if (uiSelected != nullptr) lv_obj_set_x(uiSelected, 18 + (chosen * 76));
 }
 
 void syncRunningUi() {
-  char timeText[16];
-  formatTimeText(timeText, sizeof(timeText), num);
-  lv_label_set_text(uiTimer, timeText);
-  lv_label_set_text(uiTitle, "COUNTDOWN");
-  lv_label_set_text(uiSubtitle, "MAIN POWER CONDUIT");
-  lv_label_set_text(uiActionLabel, "RUNNING");
-  lv_label_set_text(uiReset, "TOUCH TO ABORT");
   int totalSeconds = lastTimer[0] * 3600 + lastTimer[1] * 60 + lastTimer[2];
   int remainingSeconds = num[0] * 3600 + num[1] * 60 + num[2];
   int elapsedSeconds = totalSeconds - remainingSeconds;
@@ -373,46 +373,21 @@ void syncRunningUi() {
 }
 
 void syncConfigUi() {
-  char timeText[16];
-  formatTimeText(timeText, sizeof(timeText), num);
-  lv_label_set_text(uiTimer, timeText);
-  lv_label_set_text(uiTitle, "CFG");
-  lv_label_set_text(uiSubtitle, configPage == 0 ? "DIMER TOGGLE" : (configPage == 1 ? "SLEEP TOGGLE" : "DEFAULT TIMER"));
-  lv_label_set_text(uiConfigActionLabel, configPage < 2 ? "NEXT" : "DONE");
-  lv_label_set_text(uiReset, configPage == 0 ? "SCREEN DIMS" : (configPage == 1 ? "LIGHT SLEEP" : "PREFERRED RESET"));
   if (uiSelected != nullptr) lv_obj_set_x(uiSelected, 18 + (chosen * 76));
-  if (uiConfigToggle != nullptr) {
-    if (configPage == 0) {
-      if (screenDimmingEnabled) lv_obj_add_state(uiConfigToggle, LV_STATE_CHECKED);
-      else lv_obj_clear_state(uiConfigToggle, LV_STATE_CHECKED);
-      lv_checkbox_set_text(uiConfigToggle, "DIM");
-    } else if (configPage == 1) {
-      if (lightSleepEnabled) lv_obj_add_state(uiConfigToggle, LV_STATE_CHECKED);
-      else lv_obj_clear_state(uiConfigToggle, LV_STATE_CHECKED);
-      lv_checkbox_set_text(uiConfigToggle, "SLEEP");
-    }
+  if (uiConfigToggleFill != nullptr) {
+    bool toggleEnabled = configPage == 0 ? screenDimmingEnabled : lightSleepEnabled;
+    if (configPage < 2 && toggleEnabled) lv_obj_clear_flag(uiConfigToggleFill, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(uiConfigToggleFill, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
 void syncAlarmUi() {
-  char timeText[16];
-  formatTimeText(timeText, sizeof(timeText), num);
-  lv_label_set_text(uiTitle, "ALARM");
-  lv_label_set_text(uiTimer, timeText);
-  lv_label_set_text(uiSubtitle, "TIME QUANTUM EXPIRED");
-  lv_label_set_text(uiActionLabel, "SILENCE");
-  lv_label_set_text(uiReset, "TOUCH OR ROTATE TO CLEAR");
   bool flash = ((millis() / 250) % 2) == 0;
   if (flash != uiAlarmFlashCache) {
     uiAlarmFlashCache = flash;
     lv_color_t bg = flash ? STAR_RED : STAR_DARK;
     lv_obj_set_style_bg_color(lv_scr_act(), bg, 0);
     lv_obj_set_style_bg_color(uiAlarmBanner, flash ? STAR_AMBER : STAR_PANEL, 0);
-    lv_obj_set_style_text_color(uiTitle, flash ? STAR_DARK : STAR_AMBER, 0);
-    lv_obj_set_style_text_color(uiTimer, flash ? STAR_DARK : STAR_TEXT, 0);
-    lv_obj_set_style_text_color(uiSubtitle, flash ? STAR_DARK : STAR_MUTED, 0);
-    lv_obj_set_style_text_color(uiActionLabel, flash ? STAR_DARK : STAR_TEXT, 0);
-    lv_obj_set_style_text_color(uiReset, flash ? STAR_DARK : STAR_MUTED, 0);
   }
 }
 
@@ -420,33 +395,14 @@ void buildSetupUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
-  lv_obj_t *topBand = createPanel(scr, 10, 10, 220, 34, STAR_PANEL, 16);
-  uiTitle = createTextLabel(topBand, "BLY POMODORO", &lv_font_montserrat_16, STAR_AMBER);
-  setLabelZoom(uiTitle, 320);
-  lv_obj_center(uiTitle);
+  createPanel(scr, 10, 10, 220, 34, STAR_PANEL, 16);
   createPanel(scr, 14, 52, 82, 12, STAR_ORANGE, 6);
   createPanel(scr, 144, 52, 82, 12, STAR_CYAN, 6);
-  uiTimer = createTextLabel(scr, "00:15:00", &lv_font_montserrat_16, STAR_TEXT);
-  setLabelZoom(uiTimer, 560);
-  lv_obj_align(uiTimer, LV_ALIGN_CENTER, 0, -8);
-  uiSubtitle = createTextLabel(scr, "STARFLEET TIMELINE", &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiSubtitle, 240);
-  lv_obj_align(uiSubtitle, LV_ALIGN_CENTER, 0, 26);
-  const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *unit = createPanel(scr, 18 + (i * 76), 148, 60, 18, i == chosen ? STAR_GREEN : STAR_PANEL_2, 8);
-    lv_obj_t *label = createTextLabel(unit, unitLabels[i], &lv_font_montserrat_14, STAR_TEXT);
-    setLabelZoom(label, 220);
-    lv_obj_center(label);
+    createPanel(scr, 18 + (i * 76), 148, 60, 18, i == chosen ? STAR_GREEN : STAR_PANEL_2, 8);
   }
   uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_GREEN, 2);
   uiAction = createPanel(scr, 24, 178, 192, 30, STAR_CYAN, 12);
-  uiActionLabel = createTextLabel(uiAction, "START", &lv_font_montserrat_16, STAR_DARK);
-  setLabelZoom(uiActionLabel, 300);
-  lv_obj_center(uiActionLabel);
-  uiReset = createTextLabel(scr, "RESET", &lv_font_montserrat_14, STAR_AMBER);
-  setLabelZoom(uiReset, 220);
-  lv_obj_align(uiReset, LV_ALIGN_BOTTOM_MID, 0, -10);
   syncSetupUi();
 }
 
@@ -468,22 +424,7 @@ void buildRunningUi() {
   lv_obj_set_style_arc_color(uiProgress, STAR_GREEN, LV_PART_INDICATOR);
   lv_obj_set_style_bg_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(uiProgress, 0, 0);
-  uiTitle = createTextLabel(scr, "COUNTDOWN", &lv_font_montserrat_16, STAR_CYAN);
-  setLabelZoom(uiTitle, 300);
-  lv_obj_align(uiTitle, LV_ALIGN_TOP_MID, 0, 14);
-  uiTimer = createTextLabel(scr, "00:00:00", &lv_font_montserrat_16, STAR_TEXT);
-  setLabelZoom(uiTimer, 560);
-  lv_obj_align(uiTimer, LV_ALIGN_CENTER, 0, -4);
-  uiSubtitle = createTextLabel(scr, "MAIN POWER CONDUIT", &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiSubtitle, 220);
-  lv_obj_align(uiSubtitle, LV_ALIGN_CENTER, 0, 28);
   uiAction = createPanel(scr, 28, 176, 184, 28, STAR_PANEL, 12);
-  uiActionLabel = createTextLabel(uiAction, "RUNNING", &lv_font_montserrat_16, STAR_AMBER);
-  setLabelZoom(uiActionLabel, 280);
-  lv_obj_center(uiActionLabel);
-  uiReset = createTextLabel(scr, "TOUCH TO ABORT", &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiReset, 200);
-  lv_obj_align(uiReset, LV_ALIGN_BOTTOM_MID, 0, -10);
   syncRunningUi();
 }
 
@@ -491,34 +432,24 @@ void buildConfigUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
-  lv_obj_t *topBand = createPanel(scr, 10, 10, 220, 30, STAR_PANEL, 14);
-  uiConfigTitle = createTextLabel(topBand, "CFG", &lv_font_montserrat_16, STAR_AMBER);
-  setLabelZoom(uiConfigTitle, 300);
-  lv_obj_center(uiConfigTitle);
-  uiConfigHint = createTextLabel(scr, configPage == 0 ? "DIM TIMEOUT" : (configPage == 1 ? "SLEEP TIMEOUT" : "DEFAULT TIMER"), &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiConfigHint, 220);
-  lv_obj_align(uiConfigHint, LV_ALIGN_TOP_MID, 0, 52);
-  uiTimer = createTextLabel(scr, "00:15:00", &lv_font_montserrat_16, STAR_TEXT);
-  setLabelZoom(uiTimer, 560);
-  lv_obj_align(uiTimer, LV_ALIGN_CENTER, 0, -4);
-  const char *action = configPage < 2 ? "NEXT" : "DONE";
+  createPanel(scr, 10, 10, 220, 30, STAR_PANEL, 14);
   uiConfigAction = createPanel(scr, 26, 176, 188, 28, STAR_CYAN, 12);
-  uiConfigActionLabel = createTextLabel(uiConfigAction, action, &lv_font_montserrat_16, STAR_DARK);
-  setLabelZoom(uiConfigActionLabel, 300);
-  lv_obj_center(uiConfigActionLabel);
-  uiReset = createTextLabel(scr, configPage == 0 ? "SCREEN DIMMING" : (configPage == 1 ? "LIGHT SLEEP" : "PREFERRED TIMER"), &lv_font_montserrat_14, STAR_AMBER);
-  setLabelZoom(uiReset, 200);
-  lv_obj_align(uiReset, LV_ALIGN_BOTTOM_MID, 0, -10);
   if (configPage == 0 || configPage == 1) {
-    uiConfigToggle = lv_checkbox_create(scr);
-    lv_checkbox_set_text(uiConfigToggle, configPage == 0 ? "DIM" : "SLEEP");
-    lv_obj_align(uiConfigToggle, LV_ALIGN_TOP_LEFT, 22, 34);
-    lv_obj_set_style_text_color(uiConfigToggle, STAR_TEXT, 0);
-    lv_obj_set_style_bg_opa(uiConfigToggle, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(uiConfigToggle, 0, 0);
-    lv_obj_set_style_pad_all(uiConfigToggle, 0, 0);
+    int boxX = configPage == 0 ? 26 : 132;
+    uiConfigToggleOutline = lv_obj_create(scr);
+    lv_obj_set_pos(uiConfigToggleOutline, boxX, 43);
+    lv_obj_set_size(uiConfigToggleOutline, 18, 18);
+    lv_obj_clear_flag(uiConfigToggleOutline, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(uiConfigToggleOutline, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_color(uiConfigToggleOutline, STAR_TEXT, 0);
+    lv_obj_set_style_border_width(uiConfigToggleOutline, 2, 0);
+    lv_obj_set_style_shadow_width(uiConfigToggleOutline, 0, 0);
+    lv_obj_set_style_radius(uiConfigToggleOutline, 0, 0);
+    lv_obj_set_style_pad_all(uiConfigToggleOutline, 0, 0);
+    uiConfigToggleFill = createPanel(uiConfigToggleOutline, 4, 4, 10, 10, STAR_GREEN, 0);
   } else {
-    uiConfigToggle = nullptr;
+    uiConfigToggleOutline = nullptr;
+    uiConfigToggleFill = nullptr;
   }
   uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_GREEN, 2);
   syncConfigUi();
@@ -529,22 +460,7 @@ void buildAlarmUi() {
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
   uiAlarmBanner = createPanel(scr, 10, 10, 220, 34, STAR_AMBER, 16);
-  uiTitle = createTextLabel(uiAlarmBanner, "ALARM", &lv_font_montserrat_16, STAR_DARK);
-  setLabelZoom(uiTitle, 300);
-  lv_obj_center(uiTitle);
-  uiTimer = createTextLabel(scr, "00:00:00", &lv_font_montserrat_16, STAR_TEXT);
-  setLabelZoom(uiTimer, 560);
-  lv_obj_align(uiTimer, LV_ALIGN_CENTER, 0, -4);
-  uiSubtitle = createTextLabel(scr, "TIME QUANTUM EXPIRED", &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiSubtitle, 220);
-  lv_obj_align(uiSubtitle, LV_ALIGN_CENTER, 0, 28);
   uiAction = createPanel(scr, 40, 176, 160, 28, STAR_PANEL, 12);
-  uiActionLabel = createTextLabel(uiAction, "SILENCE", &lv_font_montserrat_16, STAR_TEXT);
-  setLabelZoom(uiActionLabel, 280);
-  lv_obj_center(uiActionLabel);
-  uiReset = createTextLabel(scr, "TOUCH OR ROTATE TO CLEAR", &lv_font_montserrat_14, STAR_MUTED);
-  setLabelZoom(uiReset, 180);
-  lv_obj_align(uiReset, LV_ALIGN_BOTTOM_MID, 0, -10);
   uiProgress = lv_arc_create(scr);
   lv_obj_set_size(uiProgress, 222, 222);
   lv_obj_center(uiProgress);
@@ -561,6 +477,74 @@ void buildAlarmUi() {
   lv_obj_set_style_border_width(uiProgress, 0, 0);
   uiAlarmFlashCache = false;
   syncAlarmUi();
+}
+
+void renderSetupTextOverlay() {
+  char timeText[16];
+  formatTimeText(timeText, sizeof(timeText), num);
+  drawBuiltinText("BLY POMODORO", 120, 27, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
+  drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
+  drawBuiltinText("STARFLEET TIMELINE", 120, 146, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
+  for (int i = 0; i < 3; i++) {
+    uint16_t unitBg = i == chosen ? STAR_GREEN_565 : STAR_PANEL_2_565;
+    uint16_t unitFg = i == chosen ? STAR_DARK_565 : STAR_TEXT_565;
+    drawBuiltinText(unitLabels[i], 48 + (i * 76), 157, TFT_FONT_SMALL, unitFg, unitBg);
+  }
+  drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
+  drawBuiltinText("RESET", 120, 226, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_BG_565);
+}
+
+void renderRunningTextOverlay() {
+  char timeText[16];
+  formatTimeText(timeText, sizeof(timeText), num);
+  drawBuiltinText("COUNTDOWN", 120, 22, TFT_FONT_MEDIUM, STAR_CYAN_565, STAR_BG_565);
+  drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
+  drawBuiltinText("MAIN POWER CONDUIT", 120, 148, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+  drawBuiltinText("RUNNING", 120, 190, TFT_FONT_LARGE, STAR_AMBER_565, STAR_PANEL_565);
+  drawBuiltinText("TOUCH TO ABORT", 120, 226, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+}
+
+void renderConfigTextOverlay() {
+  char timeText[16];
+  formatTimeText(timeText, sizeof(timeText), num);
+  const char *hint = configPage == 0 ? "DIM TIMEOUT" : (configPage == 1 ? "SLEEP TIMEOUT" : "DEFAULT TIMER");
+  const char *action = configPage < 2 ? "NEXT" : "DONE";
+  const char *footer = configPage == 0 ? "SCREEN DIMMING" : (configPage == 1 ? "LIGHT SLEEP" : "PREFERRED TIMER");
+  drawBuiltinText("CFG", 120, 25, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
+  drawBuiltinText(hint, 120, 56, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+  drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
+  if (configPage == 0) {
+    drawBuiltinText("DIM", 60, 52, TFT_FONT_SMALL, STAR_TEXT_565, STAR_BG_565);
+  } else if (configPage == 1) {
+    drawBuiltinText("SLEEP", 166, 52, TFT_FONT_SMALL, STAR_TEXT_565, STAR_BG_565);
+  }
+  drawBuiltinText(action, 120, 190, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
+  drawBuiltinText(footer, 120, 226, TFT_FONT_SMALL, STAR_AMBER_565, STAR_BG_565);
+}
+
+void renderAlarmTextOverlay() {
+  char timeText[16];
+  formatTimeText(timeText, sizeof(timeText), num);
+  bool flash = ((millis() / 250) % 2) == 0;
+  uint16_t screenBg = flash ? STAR_RED_565 : STAR_DARK_565;
+  uint16_t bannerBg = flash ? STAR_AMBER_565 : STAR_PANEL_565;
+  uint16_t titleFg = flash ? STAR_DARK_565 : STAR_AMBER_565;
+  uint16_t timerFg = flash ? STAR_DARK_565 : STAR_TEXT_565;
+  uint16_t subtitleFg = flash ? STAR_DARK_565 : STAR_MUTED_565;
+  uint16_t actionFg = flash ? STAR_DARK_565 : STAR_TEXT_565;
+  drawBuiltinText("ALARM", 120, 27, TFT_FONT_MEDIUM, titleFg, bannerBg);
+  drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, timerFg, screenBg);
+  drawBuiltinText("TIME QUANTUM EXPIRED", 120, 148, TFT_FONT_SMALL, subtitleFg, screenBg);
+  drawBuiltinText("SILENCE", 120, 190, TFT_FONT_LARGE, actionFg, STAR_PANEL_565);
+  drawBuiltinText("TOUCH OR ROTATE TO CLEAR", 120, 226, TFT_FONT_SMALL, subtitleFg, screenBg);
+}
+
+void renderTextOverlay() {
+  if (mode == 1) renderRunningTextOverlay();
+  else if (mode == 4) renderConfigTextOverlay();
+  else if (mode == 3) renderAlarmTextOverlay();
+  else renderSetupTextOverlay();
 }
 
 void buildUiForMode() {
@@ -680,6 +664,7 @@ void setup() {
   lightSleepTimeoutMillis = (unsigned long)sleepTimeout[0] * 3600000UL + (unsigned long)sleepTimeout[1] * 60000UL + (unsigned long)sleepTimeout[2] * 1000UL;
   for (int i = 0; i < 3; i++) num[i] = defaultTimer[i];
   M5Dial.Display.setBrightness(BRIGHTNESS_NORMAL);
+  M5Dial.Display.setTextDatum(5);
   lv_init();
   lv_disp_draw_buf_init(&lvglDrawBuf, lvglBuf, NULL, SCREEN_W * LVGL_BUF_LINES);
   lv_disp_drv_init(&lvglDispDrv);
@@ -849,4 +834,5 @@ void loop() {
   }
   syncUiState();
   processLvgl();
+  renderTextOverlay();
 }
