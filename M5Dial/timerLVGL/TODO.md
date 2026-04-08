@@ -3,6 +3,8 @@
 # ui updates
 
 # completed
+- when timer is counting down, it should not go to sleep
+- simplify the alarm go'ing off screen; remove all animations except for the timer digits and just flash the screen black and white; we want the screen refresh to be quick so there's no delay in the beep sound
 - the alarm sound only beeps once; this is completely different than ../timer/timer.ino, where the alarm beeps multiple times and flashes the screen
 - use a complete black background
 - main screen, the hrs, min, sec red pill boxes, remove the white border around the pill box

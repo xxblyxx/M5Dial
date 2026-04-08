@@ -138,6 +138,10 @@ static const lv_color_t SETUP_PILL_RED = lv_color_hex(0xFF0000);
 static const lv_color_t STAR_TEXT = lv_color_hex(0xF1E9DB);
 static const lv_color_t STAR_MUTED = lv_color_hex(0x8C98AC);
 static const lv_color_t STAR_DARK = lv_color_hex(0x000000);
+static const lv_color_t STICK_HEADER = lv_color_hex(0x043250);
+static const lv_color_t STICK_HEADER_TAG = lv_color_hex(0x2C2E44);
+static const lv_color_t STICK_HEADER_ACCENT = lv_color_hex(0xF8D302);
+static const lv_color_t STICK_HEADER_TEXT = lv_color_hex(0xC5C4C4);
 
 static constexpr int TFT_FONT_SMALL = 1;
 static constexpr int TFT_FONT_MEDIUM = 2;
@@ -163,6 +167,10 @@ static constexpr uint16_t SETUP_PILL_RED_565 = rgb888To565(0xFF0000);
 static constexpr uint16_t STAR_TEXT_565 = rgb888To565(0xF1E9DB);
 static constexpr uint16_t STAR_MUTED_565 = rgb888To565(0x8C98AC);
 static constexpr uint16_t STAR_DARK_565 = rgb888To565(0x000000);
+static constexpr uint16_t STICK_HEADER_565 = rgb888To565(0x043250);
+static constexpr uint16_t STICK_HEADER_TAG_565 = rgb888To565(0x2C2E44);
+static constexpr uint16_t STICK_HEADER_ACCENT_565 = rgb888To565(0xF8D302);
+static constexpr uint16_t STICK_HEADER_TEXT_565 = rgb888To565(0xC5C4C4);
 
 static void drawBuiltinText(const String &text, int x, int y, int font, uint16_t fg, uint16_t bg) {
   M5Dial.Display.setTextColor(fg, bg);
@@ -183,6 +191,7 @@ void renderSetupTextOverlay();
 void renderRunningTextOverlay();
 void renderConfigTextOverlay();
 void renderAlarmTextOverlay();
+void renderAlarmFastOverlay();
 void renderTextOverlay();
 
 // --- Function Prototypes ---
@@ -204,6 +213,7 @@ void updateNumStrings();
 void formatTimeText(char *out, size_t outLen, const int value[3]);
 void setCommonScreenStyle(lv_obj_t *scr);
 lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t color, int radius = 14);
+lv_obj_t *buildHeaderBanner(lv_obj_t *parent, lv_color_t mainColor, lv_color_t accentColor = STICK_HEADER_ACCENT);
 void syncSetupUi();
 void syncRunningUi();
 void syncConfigUi();
@@ -377,6 +387,14 @@ lv_obj_t *createPillLabel(lv_obj_t *parent, const char *text) {
   return label;
 }
 
+lv_obj_t *buildHeaderBanner(lv_obj_t *parent, lv_color_t mainColor, lv_color_t accentColor) {
+  lv_obj_t *main = createPanel(parent, 30, 12, 180, 18, mainColor, 3);
+  createPanel(parent, 30, 12, 10, 18, accentColor, 2);
+  createPanel(parent, 200, 12, 10, 18, accentColor, 2);
+  createPanel(parent, 86, 34, 68, 4, accentColor, 2);
+  return main;
+}
+
 void syncSetupUi() {
   for (int i = 0; i < 3; i++) {
     if (uiUnitPills[i] == nullptr) continue;
@@ -414,7 +432,7 @@ void syncAlarmUi() {
     uiAlarmFlashCache = flash;
     lv_color_t bg = flash ? STAR_RED : STAR_DARK;
     lv_obj_set_style_bg_color(lv_scr_act(), bg, 0);
-    lv_obj_set_style_bg_color(uiAlarmBanner, flash ? STAR_AMBER : STAR_PANEL, 0);
+    lv_obj_set_style_bg_color(uiAlarmBanner, flash ? STICK_HEADER_ACCENT : STICK_HEADER, 0);
   }
 }
 
@@ -422,7 +440,7 @@ void buildSetupUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
-  createPanel(scr, 10, 10, 220, 34, STAR_PANEL, 16);
+  buildHeaderBanner(scr, STICK_HEADER);
   createPanel(scr, 14, 52, 82, 12, STAR_ORANGE, 6);
   createPanel(scr, 144, 52, 82, 12, STAR_CYAN, 6);
   static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
@@ -470,7 +488,7 @@ void buildConfigUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
-  createPanel(scr, 10, 10, 220, 30, STAR_PANEL, 14);
+  buildHeaderBanner(scr, STICK_HEADER);
   uiConfigAction = createPanel(scr, 26, 176, 188, 28, STAR_CYAN, 12);
   static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
   for (int i = 0; i < 3; i++) {
@@ -490,7 +508,7 @@ void buildAlarmUi() {
   setCommonScreenStyle(scr);
   uiSelected = nullptr;
   for (int i = 0; i < 3; i++) uiUnitLabels[i] = nullptr;
-  uiAlarmBanner = createPanel(scr, 10, 10, 220, 34, STAR_AMBER, 16);
+  uiAlarmBanner = buildHeaderBanner(scr, STICK_HEADER);
   uiAction = createPanel(scr, 40, 176, 160, 28, STAR_PANEL, 12);
   uiProgress = lv_arc_create(scr);
   lv_obj_set_size(uiProgress, 222, 222);
@@ -517,7 +535,7 @@ void buildAlarmUi() {
 void renderSetupTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
-  drawBuiltinTextTransparent("BLY POMODORO", 120, 27, TFT_FONT_TITLE, STAR_AMBER_565);
+  drawBuiltinText("BLY POMODORO", 120, 22, TFT_FONT_SMALL, STICK_HEADER_TEXT_565, STICK_HEADER_565);
   drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
   drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
 }
@@ -535,7 +553,7 @@ void renderConfigTextOverlay() {
   const char *hint = configPage == 0 ? "DIM TIMEOUT" : (configPage == 1 ? "SLEEP TIMEOUT" : "DEFAULT TIMER");
   const char *action = configPage < 2 ? "NEXT" : "DONE";
   const char *footer = configPage == 0 ? "SCREEN DIMMING" : (configPage == 1 ? "LIGHT SLEEP" : "PREFERRED TIMER");
-  drawBuiltinText("CFG", 120, 25, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
+  drawBuiltinText("CONFIG", 120, 22, TFT_FONT_SMALL, STICK_HEADER_TEXT_565, STICK_HEADER_565);
   drawBuiltinText(hint, 120, 56, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
   drawBuiltinText(action, 120, 190, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
@@ -547,16 +565,27 @@ void renderAlarmTextOverlay() {
   formatTimeText(timeText, sizeof(timeText), num);
   bool flash = ((millis() / 250) % 2) == 0;
   uint16_t screenBg = flash ? STAR_RED_565 : STAR_DARK_565;
-  uint16_t bannerBg = flash ? STAR_AMBER_565 : STAR_PANEL_565;
-  uint16_t titleFg = flash ? STAR_DARK_565 : STAR_AMBER_565;
+  uint16_t bannerBg = flash ? STICK_HEADER_ACCENT_565 : STICK_HEADER_565;
+  uint16_t titleFg = flash ? STAR_DARK_565 : STICK_HEADER_TEXT_565;
   uint16_t timerFg = flash ? STAR_DARK_565 : STAR_TEXT_565;
   uint16_t subtitleFg = flash ? STAR_DARK_565 : STAR_MUTED_565;
   uint16_t actionFg = flash ? STAR_DARK_565 : STAR_TEXT_565;
-  drawBuiltinText("ALARM", 120, 27, TFT_FONT_MEDIUM, titleFg, bannerBg);
+  drawBuiltinText("ALARM", 120, 22, TFT_FONT_SMALL, titleFg, bannerBg);
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, timerFg, screenBg);
   drawBuiltinText("TIME QUANTUM EXPIRED", 120, 148, TFT_FONT_SMALL, subtitleFg, screenBg);
   drawBuiltinText("SILENCE", 120, 190, TFT_FONT_LARGE, actionFg, STAR_PANEL_565);
   drawBuiltinText("TOUCH OR ROTATE TO CLEAR", 120, 226, TFT_FONT_SMALL, subtitleFg, screenBg);
+}
+
+void renderAlarmFastOverlay() {
+  char timeText[16];
+  formatTimeText(timeText, sizeof(timeText), num);
+  bool flash = ((millis() / 100) % 2) == 0;
+  uint16_t bg = flash ? STAR_TEXT_565 : STAR_BG_565;
+  uint16_t fg = flash ? STAR_BG_565 : STAR_TEXT_565;
+
+  M5Dial.Display.fillScreen(bg);
+  drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, fg, bg);
 }
 
 void renderTextOverlay() {
@@ -832,6 +861,13 @@ void loop() {
   }
 
   updateNumStrings();
+  if (isRunMode() || isAlarmMode()) {
+    lastActivityTime = now;
+    if (isScreenDimmed) {
+      M5Dial.Display.setBrightness(BRIGHTNESS_NORMAL);
+      isScreenDimmed = false;
+    }
+  }
   if (userActive) {
     lastActivityTime = now;
     isScreenDimmed = false;
@@ -854,6 +890,10 @@ void loop() {
     }
   } else {
     alarmStart = 0;
+  }
+  if (isAlarmMode()) {
+    renderAlarmFastOverlay();
+    return;
   }
   syncUiState();
   processLvgl();
