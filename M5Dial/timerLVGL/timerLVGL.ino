@@ -628,15 +628,16 @@ void renderSetupTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
   drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
+  drawBuiltinText("ENGAGE", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
 }
 
 void renderRunningTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
   drawRunningBadgeOverlay();
-  drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  drawBuiltinText("MAIN POWER CONDUIT", 120, 148, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+  drawBuiltinText("WARP CORE", 120, 62, TFT_FONT_LARGE, STAR_MUTED_565, STAR_BG_565);
+  drawBuiltinText(timeText, 120, 114, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
+  drawBuiltinText("BREACH IN...", 120, 176, TFT_FONT_LARGE, STAR_MUTED_565, STAR_BG_565);
 }
 
 void renderConfigTextOverlay() {

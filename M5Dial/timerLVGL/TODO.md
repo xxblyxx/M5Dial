@@ -1,6 +1,8 @@
 # bugs
 
 # ui updates
+- change "Start" word to "Engage"
+- during the timer countdown, change "Main Power Conduit" to "Warp Core Breach In...", split into two lines and make sure we don't overlap the timer digits and any part of the progress arc
 
 # completed
 - when timer is counting down, it should not go to sleep
