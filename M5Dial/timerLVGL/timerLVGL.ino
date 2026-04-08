@@ -443,6 +443,7 @@ void buildRunningUi() {
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
   uiSelected = nullptr;
+  uiAction = nullptr;
   for (int i = 0; i < 3; i++) uiUnitPills[i] = nullptr;
   for (int i = 0; i < 3; i++) uiUnitLabels[i] = nullptr;
   uiProgress = lv_arc_create(scr);
@@ -462,7 +463,6 @@ void buildRunningUi() {
   lv_obj_set_style_border_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_outline_width(uiProgress, 0, 0);
   lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
-  uiAction = createPanel(scr, 28, 176, 184, 28, STAR_PANEL, 12);
   syncRunningUi();
 }
 
@@ -525,11 +525,8 @@ void renderSetupTextOverlay() {
 void renderRunningTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
-  drawBuiltinText("COUNTDOWN", 120, 22, TFT_FONT_MEDIUM, STAR_CYAN_565, STAR_BG_565);
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
   drawBuiltinText("MAIN POWER CONDUIT", 120, 148, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
-  drawBuiltinText("RUNNING", 120, 190, TFT_FONT_LARGE, STAR_AMBER_565, STAR_PANEL_565);
-  drawBuiltinText("TOUCH TO ABORT", 120, 226, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
 }
 
 void renderConfigTextOverlay() {
