@@ -173,6 +173,7 @@ static constexpr uint16_t STICK_HEADER_565 = rgb888To565(0x043250);
 static constexpr uint16_t STICK_HEADER_TAG_565 = rgb888To565(0x2C2E44);
 static constexpr uint16_t STICK_HEADER_ACCENT_565 = rgb888To565(0xF8D302);
 static constexpr uint16_t STICK_HEADER_TEXT_565 = rgb888To565(0xC5C4C4);
+static constexpr uint16_t STARFLEET_BADGE_565 = rgb888To565(0x1E47C5);
 
 static void drawBuiltinText(const String &text, int x, int y, int font, uint16_t fg, uint16_t bg) {
   M5Dial.Display.setTextColor(fg, bg);
@@ -187,6 +188,74 @@ static void drawBuiltinText(const char *text, int x, int y, int font, uint16_t f
 static void drawBuiltinTextTransparent(const char *text, int x, int y, int font, uint16_t fg) {
   M5Dial.Display.setTextColor(fg);
   M5Dial.Display.drawString(text, x, y, font);
+}
+
+static int getRunningProgressPercent() {
+  int totalSeconds = lastTimer[0] * 3600 + lastTimer[1] * 60 + lastTimer[2];
+  int remainingSeconds = num[0] * 3600 + num[1] * 60 + num[2];
+  int elapsedSeconds = totalSeconds - remainingSeconds;
+  int progress = 0;
+  if (totalSeconds > 0) {
+    progress = (elapsedSeconds * 100) / totalSeconds;
+    if (progress < 0) progress = 0;
+    if (progress > 100) progress = 100;
+  }
+  return progress;
+}
+
+static void rotatePoint(float x, float y, float angleRad, int &outX, int &outY) {
+  outX = (int)roundf((x * cosf(angleRad)) - (y * sinf(angleRad)));
+  outY = (int)roundf((x * sinf(angleRad)) + (y * cosf(angleRad)));
+}
+
+static void fillStarPolygon(int cx, int cy, int outerRadius, int innerRadius, float rotationRad, uint16_t color) {
+  int x[10];
+  int y[10];
+  for (int i = 0; i < 10; i++) {
+    float angleDeg = -90.0f + (36.0f * i);
+    float angleRad = (angleDeg * DEG_TO_RAD) + rotationRad;
+    int radius = (i % 2 == 0) ? outerRadius : innerRadius;
+    x[i] = cx + (int)roundf(cosf(angleRad) * radius);
+    y[i] = cy + (int)roundf(sinf(angleRad) * radius);
+  }
+  for (int i = 0; i < 10; i++) {
+    int next = (i + 1) % 10;
+    M5Dial.Display.fillTriangle(cx, cy, x[i], y[i], x[next], y[next], color);
+  }
+}
+
+static void drawStarfleetBadge(int cx, int cy, int size, float rotationRad, uint16_t badgeColor, uint16_t starColor) {
+  const int pointCount = 6;
+  const int px[pointCount] = { 0, -(size * 8) / 18, -(size * 12) / 18, (size * 2) / 18, (size * 9) / 18, (size * 6) / 18 };
+  const int py[pointCount] = { -size, -(size * 5) / 18, size, (size * 8) / 18, size, -(size * 5) / 18 };
+  int rx[pointCount];
+  int ry[pointCount];
+
+  for (int i = 0; i < pointCount; i++) {
+    rotatePoint((float)px[i], (float)py[i], rotationRad, rx[i], ry[i]);
+    rx[i] += cx;
+    ry[i] += cy;
+  }
+
+  M5Dial.Display.fillTriangle(rx[0], ry[0], rx[1], ry[1], rx[2], ry[2], badgeColor);
+  M5Dial.Display.fillTriangle(rx[0], ry[0], rx[2], ry[2], rx[3], ry[3], badgeColor);
+  M5Dial.Display.fillTriangle(rx[0], ry[0], rx[3], ry[3], rx[4], ry[4], badgeColor);
+  M5Dial.Display.fillTriangle(rx[0], ry[0], rx[4], ry[4], rx[5], ry[5], badgeColor);
+
+  int starCx;
+  int starCy;
+  rotatePoint(0.0f, -(size * 4.0f) / 18.0f, rotationRad, starCx, starCy);
+  fillStarPolygon(cx + starCx, cy + starCy, (size * 6) / 18, (size * 3) / 18, rotationRad, starColor);
+}
+
+static void drawRunningBadgeOverlay() {
+  int progress = getRunningProgressPercent();
+  float angleDeg = 270.0f + (progress * 3.6f);
+  float angleRad = angleDeg * DEG_TO_RAD;
+  int badgeRadius = 104;
+  int badgeX = (SCREEN_W / 2) + (int)roundf(cosf(angleRad) * badgeRadius);
+  int badgeY = (SCREEN_H / 2) + (int)roundf(sinf(angleRad) * badgeRadius);
+  drawStarfleetBadge(badgeX, badgeY, 14, angleRad + (180.0f * DEG_TO_RAD), STARFLEET_BADGE_565, STAR_TEXT_565);
 }
 
 void renderSetupTextOverlay();
@@ -419,16 +488,7 @@ void syncSetupUi() {
 }
 
 void syncRunningUi() {
-  int totalSeconds = lastTimer[0] * 3600 + lastTimer[1] * 60 + lastTimer[2];
-  int remainingSeconds = num[0] * 3600 + num[1] * 60 + num[2];
-  int elapsedSeconds = totalSeconds - remainingSeconds;
-  int progress = 0;
-  if (totalSeconds > 0) {
-    progress = (elapsedSeconds * 100) / totalSeconds;
-    if (progress < 0) progress = 0;
-    if (progress > 100) progress = 100;
-  }
-  lv_arc_set_value(uiProgress, progress);
+  lv_arc_set_value(uiProgress, getRunningProgressPercent());
 }
 
 void syncConfigUi() {
@@ -501,6 +561,10 @@ void buildRunningUi() {
   lv_obj_set_style_border_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_outline_width(uiProgress, 0, 0);
   lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_opa(uiProgress, LV_OPA_TRANSP, LV_PART_KNOB);
+  lv_obj_set_style_border_width(uiProgress, 0, LV_PART_KNOB);
+  lv_obj_set_style_outline_width(uiProgress, 0, LV_PART_KNOB);
+  lv_obj_set_style_shadow_width(uiProgress, 0, LV_PART_KNOB);
   syncRunningUi();
 }
 
@@ -551,6 +615,10 @@ void buildAlarmUi() {
   lv_obj_set_style_border_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_outline_width(uiProgress, 0, 0);
   lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_opa(uiProgress, LV_OPA_TRANSP, LV_PART_KNOB);
+  lv_obj_set_style_border_width(uiProgress, 0, LV_PART_KNOB);
+  lv_obj_set_style_outline_width(uiProgress, 0, LV_PART_KNOB);
+  lv_obj_set_style_shadow_width(uiProgress, 0, LV_PART_KNOB);
   uiAlarmFlashCache = false;
   for (int i = 0; i < 3; i++) uiUnitPills[i] = nullptr;
   syncAlarmUi();
@@ -566,6 +634,7 @@ void renderSetupTextOverlay() {
 void renderRunningTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
+  drawRunningBadgeOverlay();
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
   drawBuiltinText("MAIN POWER CONDUIT", 120, 148, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
 }
