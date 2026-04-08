@@ -71,6 +71,7 @@ static lv_obj_t *uiSelected = nullptr;
 static lv_obj_t *uiProgress = nullptr;
 static lv_obj_t *uiConfigAction = nullptr;
 static lv_obj_t *uiAlarmBanner = nullptr;
+static lv_obj_t *uiSetupTitle[2] = { nullptr, nullptr };
 static lv_obj_t *uiUnitPills[3] = { nullptr, nullptr, nullptr };
 static lv_obj_t *uiUnitLabels[3] = { nullptr, nullptr, nullptr };
 
@@ -81,6 +82,7 @@ int g_deb = 0;
 
 static constexpr int SCREEN_W = 240;
 static constexpr int SCREEN_H = 240;
+static constexpr int HEADER_H = 48;
 static constexpr int LVGL_BUF_LINES = 20;
 static lv_color_t lvglBuf[SCREEN_W * LVGL_BUF_LINES];
 static lv_disp_draw_buf_t lvglDrawBuf;
@@ -387,11 +389,23 @@ lv_obj_t *createPillLabel(lv_obj_t *parent, const char *text) {
   return label;
 }
 
+lv_obj_t *createHeaderLabel(lv_obj_t *parent, const char *text, const lv_font_t *font, int yOffset) {
+  lv_obj_t *label = lv_label_create(parent);
+  lv_label_set_text(label, text);
+  lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(label, 0, 0);
+  lv_obj_set_style_pad_all(label, 0, 0);
+  lv_obj_set_style_text_color(label, STICK_HEADER_TEXT, 0);
+  lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_align(label, LV_ALIGN_TOP_MID, 0, yOffset);
+  return label;
+}
+
 lv_obj_t *buildHeaderBanner(lv_obj_t *parent, lv_color_t mainColor, lv_color_t accentColor) {
-  lv_obj_t *main = createPanel(parent, 30, 12, 180, 18, mainColor, 3);
-  createPanel(parent, 30, 12, 10, 18, accentColor, 2);
-  createPanel(parent, 200, 12, 10, 18, accentColor, 2);
-  createPanel(parent, 86, 34, 68, 4, accentColor, 2);
+  lv_obj_t *main = createPanel(parent, 0, 0, SCREEN_W, HEADER_H, mainColor, 0);
+  createPanel(parent, 0, 0, 14, HEADER_H, accentColor, 0);
+  createPanel(parent, SCREEN_W - 14, 0, 14, HEADER_H, accentColor, 0);
+  createPanel(parent, 0, HEADER_H - 4, SCREEN_W, 4, accentColor, 0);
   return main;
 }
 
@@ -440,7 +454,11 @@ void buildSetupUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSetupTitle[0] = nullptr;
+  uiSetupTitle[1] = nullptr;
   buildHeaderBanner(scr, STICK_HEADER);
+  uiSetupTitle[0] = createHeaderLabel(scr, "BLY", &lv_font_montserrat_20, 5);
+  uiSetupTitle[1] = createHeaderLabel(scr, "POMODORO", &lv_font_montserrat_20, 23);
   createPanel(scr, 14, 52, 82, 12, STAR_ORANGE, 6);
   createPanel(scr, 144, 52, 82, 12, STAR_CYAN, 6);
   static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
@@ -460,6 +478,8 @@ void buildRunningUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSetupTitle[0] = nullptr;
+  uiSetupTitle[1] = nullptr;
   uiSelected = nullptr;
   uiAction = nullptr;
   for (int i = 0; i < 3; i++) uiUnitPills[i] = nullptr;
@@ -488,6 +508,8 @@ void buildConfigUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSetupTitle[0] = nullptr;
+  uiSetupTitle[1] = nullptr;
   buildHeaderBanner(scr, STICK_HEADER);
   uiConfigAction = createPanel(scr, 26, 176, 188, 28, STAR_CYAN, 12);
   static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
@@ -506,6 +528,8 @@ void buildAlarmUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSetupTitle[0] = nullptr;
+  uiSetupTitle[1] = nullptr;
   uiSelected = nullptr;
   for (int i = 0; i < 3; i++) uiUnitLabels[i] = nullptr;
   uiAlarmBanner = buildHeaderBanner(scr, STICK_HEADER);
@@ -535,7 +559,6 @@ void buildAlarmUi() {
 void renderSetupTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
-  drawBuiltinText("BLY POMODORO", 120, 22, TFT_FONT_SMALL, STICK_HEADER_TEXT_565, STICK_HEADER_565);
   drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
   drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
 }
