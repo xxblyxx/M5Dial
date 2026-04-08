@@ -29,7 +29,6 @@ enum class AppMode {
 
 // --- Global State ---
 int g_timer_values[3] = { 0, 15, 0 }; // Current working timer (H, M, S)
-int g_alarm_duration_ms = 15000;
 
 long g_encoder_old_pos = 0;
 AppMode g_current_mode = AppMode::SETUP;
@@ -119,7 +118,7 @@ unsigned long lastResetButtonTime = 0;
 unsigned long lastButtonPress = 0;
 int lastTimer[3] = {0, 15, 0};
 int alarmStart = 0;
-unsigned long alarmTimerDuration = 0;
+unsigned long alarmTimerDuration = 15000;
 bool resetButtonPressed = false;
 bool resetHoldConsumed = false;
 long stopAlarmEncoderOldPos = 0;
@@ -127,7 +126,7 @@ long stopAlarmEncoderNewPos = 0;
 
 // --- UI Helpers & Globals ---
 
-static const lv_color_t STAR_BG = lv_color_hex(0x04070F);
+static const lv_color_t STAR_BG = lv_color_hex(0x000000);
 static const lv_color_t STAR_PANEL = lv_color_hex(0x16233A);
 static const lv_color_t STAR_PANEL_2 = lv_color_hex(0x273247);
 static const lv_color_t STAR_AMBER = lv_color_hex(0xFF9A2E);
@@ -135,14 +134,16 @@ static const lv_color_t STAR_ORANGE = lv_color_hex(0xD56C28);
 static const lv_color_t STAR_CYAN = lv_color_hex(0x58E8FF);
 static const lv_color_t STAR_GREEN = lv_color_hex(0x78F1A7);
 static const lv_color_t STAR_RED = lv_color_hex(0xFF5A4F);
+static const lv_color_t SETUP_PILL_RED = lv_color_hex(0xFF0000);
 static const lv_color_t STAR_TEXT = lv_color_hex(0xF1E9DB);
 static const lv_color_t STAR_MUTED = lv_color_hex(0x8C98AC);
-static const lv_color_t STAR_DARK = lv_color_hex(0x0B1019);
+static const lv_color_t STAR_DARK = lv_color_hex(0x000000);
 
 static constexpr int TFT_FONT_SMALL = 1;
 static constexpr int TFT_FONT_MEDIUM = 2;
 static constexpr int TFT_FONT_LARGE = 4;
 static constexpr int TFT_FONT_TIMER = 7;
+static constexpr int TFT_FONT_TITLE = 2;
 
 static constexpr uint16_t rgb888To565(uint32_t color) {
   return ((color & 0x00F80000) >> 8)
@@ -150,16 +151,17 @@ static constexpr uint16_t rgb888To565(uint32_t color) {
        | ((color & 0x000000F8) >> 3);
 }
 
-static constexpr uint16_t STAR_BG_565 = rgb888To565(0x04070F);
+static constexpr uint16_t STAR_BG_565 = rgb888To565(0x000000);
 static constexpr uint16_t STAR_PANEL_565 = rgb888To565(0x16233A);
 static constexpr uint16_t STAR_PANEL_2_565 = rgb888To565(0x273247);
 static constexpr uint16_t STAR_AMBER_565 = rgb888To565(0xFF9A2E);
 static constexpr uint16_t STAR_CYAN_565 = rgb888To565(0x58E8FF);
 static constexpr uint16_t STAR_GREEN_565 = rgb888To565(0x78F1A7);
 static constexpr uint16_t STAR_RED_565 = rgb888To565(0xFF5A4F);
+static constexpr uint16_t SETUP_PILL_RED_565 = rgb888To565(0xFF0000);
 static constexpr uint16_t STAR_TEXT_565 = rgb888To565(0xF1E9DB);
 static constexpr uint16_t STAR_MUTED_565 = rgb888To565(0x8C98AC);
-static constexpr uint16_t STAR_DARK_565 = rgb888To565(0x0B1019);
+static constexpr uint16_t STAR_DARK_565 = rgb888To565(0x000000);
 
 static void drawBuiltinText(const String &text, int x, int y, int font, uint16_t fg, uint16_t bg) {
   M5Dial.Display.setTextColor(fg, bg);
@@ -168,6 +170,11 @@ static void drawBuiltinText(const String &text, int x, int y, int font, uint16_t
 
 static void drawBuiltinText(const char *text, int x, int y, int font, uint16_t fg, uint16_t bg) {
   M5Dial.Display.setTextColor(fg, bg);
+  M5Dial.Display.drawString(text, x, y, font);
+}
+
+static void drawBuiltinTextTransparent(const char *text, int x, int y, int font, uint16_t fg) {
+  M5Dial.Display.setTextColor(fg);
   M5Dial.Display.drawString(text, x, y, font);
 }
 
@@ -339,6 +346,8 @@ void setCommonScreenStyle(lv_obj_t *scr) {
   lv_obj_set_style_bg_color(scr, STAR_BG, 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(scr, 0, 0);
+  lv_obj_set_style_outline_width(scr, 0, 0);
+  lv_obj_set_style_outline_opa(scr, LV_OPA_TRANSP, 0);
 }
 
 lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t color, int radius) {
@@ -349,7 +358,10 @@ lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t c
   lv_obj_set_style_bg_color(obj, color, 0);
   lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(obj, 0, 0);
+  lv_obj_set_style_border_opa(obj, LV_OPA_TRANSP, 0);
   lv_obj_set_style_shadow_width(obj, 0, 0);
+  lv_obj_set_style_outline_width(obj, 0, 0);
+  lv_obj_set_style_outline_opa(obj, LV_OPA_TRANSP, 0);
   lv_obj_set_style_radius(obj, radius, 0);
   lv_obj_set_style_pad_all(obj, 0, 0);
   return obj;
@@ -399,9 +411,12 @@ void buildSetupUi() {
   createPanel(scr, 14, 52, 82, 12, STAR_ORANGE, 6);
   createPanel(scr, 144, 52, 82, 12, STAR_CYAN, 6);
   for (int i = 0; i < 3; i++) {
-    createPanel(scr, 18 + (i * 76), 148, 60, 18, i == chosen ? STAR_GREEN : STAR_PANEL_2, 8);
+    lv_obj_t *pill = createPanel(scr, 18 + (i * 76), 148, 60, 18, SETUP_PILL_RED, 8);
+    lv_obj_set_style_border_width(pill, 2, 0);
+    lv_obj_set_style_border_color(pill, SETUP_PILL_RED, 0);
+    lv_obj_set_style_border_opa(pill, LV_OPA_COVER, 0);
   }
-  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_GREEN, 2);
+  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, SETUP_PILL_RED, 2);
   uiAction = createPanel(scr, 24, 178, 192, 30, STAR_CYAN, 12);
   syncSetupUi();
 }
@@ -421,9 +436,12 @@ void buildRunningUi() {
   lv_obj_set_style_arc_width(uiProgress, 10, LV_PART_MAIN);
   lv_obj_set_style_arc_width(uiProgress, 12, LV_PART_INDICATOR);
   lv_obj_set_style_arc_color(uiProgress, STAR_PANEL_2, LV_PART_MAIN);
-  lv_obj_set_style_arc_color(uiProgress, STAR_GREEN, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(uiProgress, STAR_RED, LV_PART_INDICATOR);
   lv_obj_set_style_bg_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(uiProgress, 0, 0);
+  lv_obj_set_style_border_opa(uiProgress, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_outline_width(uiProgress, 0, 0);
+  lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
   uiAction = createPanel(scr, 28, 176, 184, 28, STAR_PANEL, 12);
   syncRunningUi();
 }
@@ -451,7 +469,7 @@ void buildConfigUi() {
     uiConfigToggleOutline = nullptr;
     uiConfigToggleFill = nullptr;
   }
-  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_GREEN, 2);
+  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_AMBER, 2);
   syncConfigUi();
 }
 
@@ -475,6 +493,9 @@ void buildAlarmUi() {
   lv_obj_set_style_arc_color(uiProgress, STAR_RED, LV_PART_INDICATOR);
   lv_obj_set_style_bg_opa(uiProgress, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(uiProgress, 0, 0);
+  lv_obj_set_style_border_opa(uiProgress, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_outline_width(uiProgress, 0, 0);
+  lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
   uiAlarmFlashCache = false;
   syncAlarmUi();
 }
@@ -482,17 +503,16 @@ void buildAlarmUi() {
 void renderSetupTextOverlay() {
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
-  drawBuiltinText("BLY POMODORO", 120, 27, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
+  drawBuiltinTextTransparent("BLY POMODORO", 120, 27, TFT_FONT_TITLE, STAR_AMBER_565);
   drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  drawBuiltinText("STARFLEET TIMELINE", 120, 146, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
+  //drawBuiltinText("STARFLEET TIMELINE", 120, 146, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
   static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
   for (int i = 0; i < 3; i++) {
-    uint16_t unitBg = i == chosen ? STAR_GREEN_565 : STAR_PANEL_2_565;
-    uint16_t unitFg = i == chosen ? STAR_DARK_565 : STAR_TEXT_565;
+    uint16_t unitBg = SETUP_PILL_RED_565;
+    uint16_t unitFg = STAR_TEXT_565;
     drawBuiltinText(unitLabels[i], 48 + (i * 76), 157, TFT_FONT_SMALL, unitFg, unitBg);
   }
   drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
-  drawBuiltinText("RESET", 120, 226, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_BG_565);
 }
 
 void renderRunningTextOverlay() {
@@ -665,6 +685,8 @@ void setup() {
   for (int i = 0; i < 3; i++) num[i] = defaultTimer[i];
   M5Dial.Display.setBrightness(BRIGHTNESS_NORMAL);
   M5Dial.Display.setTextDatum(5);
+  // LVGL's 16-bit draw buffer needs byte swapping when pushed to the panel.
+  M5Dial.Display.setSwapBytes(true);
   lv_init();
   lv_disp_draw_buf_init(&lvglDrawBuf, lvglBuf, NULL, SCREEN_W * LVGL_BUF_LINES);
   lv_disp_drv_init(&lvglDispDrv);
@@ -809,6 +831,17 @@ void loop() {
     updateTime();
   }
 
+  if (isAlarmMode() && alarmStart == 1) {
+    auto t = M5Dial.Touch.getDetail();
+    if (t.isPressed()) {
+      stopAlarmAndReset();
+    }
+    long stopAlarmEncoderNewPos = M5Dial.Encoder.read();
+    if (stopAlarmEncoderOldPos != stopAlarmEncoderNewPos) {
+      stopAlarmAndReset();
+    }
+  }
+
   updateNumStrings();
   if (userActive) {
     lastActivityTime = now;
@@ -828,6 +861,7 @@ void loop() {
       delay(200);
     } else {
       M5Dial.Speaker.tone(4000, 50);
+      delay(100);
     }
   } else {
     alarmStart = 0;
