@@ -4,6 +4,7 @@
 #include "lv_conf.h"
 #include <lvgl.h>
 #include <driver/gpio.h>
+#include <esp_heap_caps.h>
 #include <esp_sleep.h>
 #include <Preferences.h>
 
@@ -83,14 +84,21 @@ int g_deb = 0;
 static constexpr int SCREEN_W = 240;
 static constexpr int SCREEN_H = 240;
 static constexpr int HEADER_H = 48;
-static constexpr int LVGL_BUF_LINES = 20;
-static lv_color_t lvglBuf[SCREEN_W * LVGL_BUF_LINES];
+static constexpr int LVGL_BUF_LINES = 40;
+static constexpr int LVGL_FALLBACK_BUF_LINES = 20;
+static constexpr size_t LVGL_BUF_PIXELS = SCREEN_W * LVGL_BUF_LINES;
+static constexpr size_t LVGL_FALLBACK_BUF_PIXELS = SCREEN_W * LVGL_FALLBACK_BUF_LINES;
+static lv_color_t *lvglBuf1 = nullptr;
+static lv_color_t *lvglBuf2 = nullptr;
+static lv_color_t lvglFallbackBuf[LVGL_FALLBACK_BUF_PIXELS];
+static size_t lvglBufPixels = LVGL_FALLBACK_BUF_PIXELS;
 static lv_disp_draw_buf_t lvglDrawBuf;
 static lv_disp_drv_t lvglDispDrv;
-static unsigned long lastLvglTick = 0;
 static int uiModeCache = -1;
 static int uiConfigPageCache = -1;
 static int uiChosenCache = -1;
+static int uiRunningProgressCache = -1;
+static int uiRunningTextSecondsCache = -1;
 static bool uiDimCache = false;
 static bool uiSleepCache = false;
 static bool uiAlarmFlashCache = false;
@@ -488,7 +496,10 @@ void syncSetupUi() {
 }
 
 void syncRunningUi() {
-  lv_arc_set_value(uiProgress, getRunningProgressPercent());
+  int progress = getRunningProgressPercent();
+  if (progress == uiRunningProgressCache) return;
+  uiRunningProgressCache = progress;
+  if (uiProgress != nullptr) lv_arc_set_value(uiProgress, progress);
 }
 
 void syncConfigUi() {
@@ -538,6 +549,8 @@ void buildRunningUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiRunningProgressCache = -1;
+  uiRunningTextSecondsCache = -1;
   uiSetupTitle[0] = nullptr;
   uiSetupTitle[1] = nullptr;
   uiSelected = nullptr;
@@ -632,6 +645,9 @@ void renderSetupTextOverlay() {
 }
 
 void renderRunningTextOverlay() {
+  int remainingSeconds = num[0] * 3600 + num[1] * 60 + num[2];
+  if (remainingSeconds == uiRunningTextSecondsCache) return;
+  uiRunningTextSecondsCache = remainingSeconds;
   char timeText[16];
   formatTimeText(timeText, sizeof(timeText), num);
   drawRunningBadgeOverlay();
@@ -809,20 +825,33 @@ void setup() {
   // LVGL's 16-bit draw buffer needs byte swapping when pushed to the panel.
   M5Dial.Display.setSwapBytes(true);
   lv_init();
-  lv_disp_draw_buf_init(&lvglDrawBuf, lvglBuf, NULL, SCREEN_W * LVGL_BUF_LINES);
+  size_t lvglBufSizeBytes = LVGL_BUF_PIXELS * sizeof(lv_color_t);
+  lvglBuf1 = (lv_color_t *)heap_caps_malloc(lvglBufSizeBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  lvglBuf2 = (lv_color_t *)heap_caps_malloc(lvglBufSizeBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  if (lvglBuf1 == nullptr) {
+    lvglBuf1 = lvglFallbackBuf;
+    lvglBuf2 = nullptr;
+    lvglBufPixels = LVGL_FALLBACK_BUF_PIXELS;
+  } else {
+    lvglBufPixels = LVGL_BUF_PIXELS;
+    if (lvglBuf2 == nullptr) {
+      lvglBuf2 = nullptr;
+    }
+  }
+  lv_disp_draw_buf_init(&lvglDrawBuf, lvglBuf1, lvglBuf2, lvglBufPixels);
   lv_disp_drv_init(&lvglDispDrv);
   lvglDispDrv.hor_res = SCREEN_W;
   lvglDispDrv.ver_res = SCREEN_H;
   lvglDispDrv.flush_cb = [](lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    M5Dial.Display.pushImage(area->x1, area->y1, w, h, (const uint16_t *)color_p);
+    M5Dial.Display.pushImageDMA(area->x1, area->y1, w, h, (const uint16_t *)color_p);
+    M5Dial.Display.waitDMA();
     lv_disp_flush_ready(disp);
   };
   lvglDispDrv.draw_buf = &lvglDrawBuf;
   lv_disp_drv_register(&lvglDispDrv);
   lastActivityTime = millis();
-  lastLvglTick = millis();
   delay(200);
 }
 
