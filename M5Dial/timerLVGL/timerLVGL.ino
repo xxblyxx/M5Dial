@@ -70,8 +70,6 @@ static lv_obj_t *uiAction = nullptr;
 static lv_obj_t *uiSelected = nullptr;
 static lv_obj_t *uiProgress = nullptr;
 static lv_obj_t *uiConfigAction = nullptr;
-static lv_obj_t *uiConfigToggleOutline = nullptr;
-static lv_obj_t *uiConfigToggleFill = nullptr;
 static lv_obj_t *uiAlarmBanner = nullptr;
 
 // --- Internal Flags ---
@@ -386,11 +384,6 @@ void syncRunningUi() {
 
 void syncConfigUi() {
   if (uiSelected != nullptr) lv_obj_set_x(uiSelected, 18 + (chosen * 76));
-  if (uiConfigToggleFill != nullptr) {
-    bool toggleEnabled = configPage == 0 ? screenDimmingEnabled : lightSleepEnabled;
-    if (configPage < 2 && toggleEnabled) lv_obj_clear_flag(uiConfigToggleFill, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(uiConfigToggleFill, LV_OBJ_FLAG_HIDDEN);
-  }
 }
 
 void syncAlarmUi() {
@@ -452,24 +445,13 @@ void buildConfigUi() {
   setCommonScreenStyle(scr);
   createPanel(scr, 10, 10, 220, 30, STAR_PANEL, 14);
   uiConfigAction = createPanel(scr, 26, 176, 188, 28, STAR_CYAN, 12);
-  if (configPage == 0 || configPage == 1) {
-    int boxX = configPage == 0 ? 26 : 132;
-    uiConfigToggleOutline = lv_obj_create(scr);
-    lv_obj_set_pos(uiConfigToggleOutline, boxX, 43);
-    lv_obj_set_size(uiConfigToggleOutline, 18, 18);
-    lv_obj_clear_flag(uiConfigToggleOutline, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(uiConfigToggleOutline, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(uiConfigToggleOutline, STAR_TEXT, 0);
-    lv_obj_set_style_border_width(uiConfigToggleOutline, 2, 0);
-    lv_obj_set_style_shadow_width(uiConfigToggleOutline, 0, 0);
-    lv_obj_set_style_radius(uiConfigToggleOutline, 0, 0);
-    lv_obj_set_style_pad_all(uiConfigToggleOutline, 0, 0);
-    uiConfigToggleFill = createPanel(uiConfigToggleOutline, 4, 4, 10, 10, STAR_GREEN, 0);
-  } else {
-    uiConfigToggleOutline = nullptr;
-    uiConfigToggleFill = nullptr;
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *pill = createPanel(scr, 18 + (i * 76), 148, 60, 18, SETUP_PILL_RED, 8);
+    lv_obj_set_style_border_width(pill, 2, 0);
+    lv_obj_set_style_border_color(pill, SETUP_PILL_RED, 0);
+    lv_obj_set_style_border_opa(pill, LV_OPA_COVER, 0);
   }
-  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, STAR_AMBER, 2);
+  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, SETUP_PILL_RED, 2);
   syncConfigUi();
 }
 
@@ -534,10 +516,9 @@ void renderConfigTextOverlay() {
   drawBuiltinText("CFG", 120, 25, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
   drawBuiltinText(hint, 120, 56, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  if (configPage == 0) {
-    drawBuiltinText("DIM", 60, 52, TFT_FONT_SMALL, STAR_TEXT_565, STAR_BG_565);
-  } else if (configPage == 1) {
-    drawBuiltinText("SLEEP", 166, 52, TFT_FONT_SMALL, STAR_TEXT_565, STAR_BG_565);
+  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
+  for (int i = 0; i < 3; i++) {
+    drawBuiltinText(unitLabels[i], 48 + (i * 76), 157, TFT_FONT_SMALL, STAR_TEXT_565, SETUP_PILL_RED_565);
   }
   drawBuiltinText(action, 120, 190, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
   drawBuiltinText(footer, 120, 226, TFT_FONT_SMALL, STAR_AMBER_565, STAR_BG_565);
@@ -733,17 +714,7 @@ void loop() {
       if (g_deb == 0) {
         g_deb = 1;
         M5Dial.Speaker.tone(3000, 80);
-        if (configPage == 0 && t.y > 34 && t.y < 66 && t.x > 16 && t.x < 112) {
-          screenDimmingEnabled = !screenDimmingEnabled;
-          storeCurrentConfigPage();
-          if (!screenDimmingEnabled) {
-            M5Dial.Display.setBrightness(BRIGHTNESS_NORMAL);
-            isScreenDimmed = false;
-          }
-        } else if (configPage == 1 && t.y > 34 && t.y < 66 && t.x > 132 && t.x < 224) {
-          lightSleepEnabled = !lightSleepEnabled;
-          storeCurrentConfigPage();
-        } else if (t.y > 86 && t.y < 150) {
+        if (t.y > 86 && t.y < 150) {
           if (t.x > 10 && t.x < 90) chosen = 0;
           if (t.x > 90 && t.x < 166) chosen = 1;
           if (t.x > 166 && t.x < 224) chosen = 2;
