@@ -71,6 +71,8 @@ static lv_obj_t *uiSelected = nullptr;
 static lv_obj_t *uiProgress = nullptr;
 static lv_obj_t *uiConfigAction = nullptr;
 static lv_obj_t *uiAlarmBanner = nullptr;
+static lv_obj_t *uiUnitPills[3] = { nullptr, nullptr, nullptr };
+static lv_obj_t *uiUnitLabels[3] = { nullptr, nullptr, nullptr };
 
 // --- Internal Flags ---
 bool g_touch_debounced = false;
@@ -153,6 +155,7 @@ static constexpr uint16_t STAR_BG_565 = rgb888To565(0x000000);
 static constexpr uint16_t STAR_PANEL_565 = rgb888To565(0x16233A);
 static constexpr uint16_t STAR_PANEL_2_565 = rgb888To565(0x273247);
 static constexpr uint16_t STAR_AMBER_565 = rgb888To565(0xFF9A2E);
+static constexpr uint16_t STAR_ORANGE_565 = rgb888To565(0xD56C28);
 static constexpr uint16_t STAR_CYAN_565 = rgb888To565(0x58E8FF);
 static constexpr uint16_t STAR_GREEN_565 = rgb888To565(0x78F1A7);
 static constexpr uint16_t STAR_RED_565 = rgb888To565(0xFF5A4F);
@@ -365,8 +368,22 @@ lv_obj_t *createPanel(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t c
   return obj;
 }
 
+lv_obj_t *createPillLabel(lv_obj_t *parent, const char *text) {
+  lv_obj_t *label = lv_label_create(parent);
+  lv_label_set_text(label, text);
+  lv_obj_set_style_text_color(label, STAR_TEXT, 0);
+  lv_obj_set_style_text_font(label, LV_FONT_DEFAULT, 0);
+  lv_obj_center(label);
+  return label;
+}
+
 void syncSetupUi() {
-  if (uiSelected != nullptr) lv_obj_set_x(uiSelected, 18 + (chosen * 76));
+  for (int i = 0; i < 3; i++) {
+    if (uiUnitPills[i] == nullptr) continue;
+    lv_color_t pillColor = (i == chosen) ? SETUP_PILL_RED : STAR_ORANGE;
+    lv_obj_set_style_bg_color(uiUnitPills[i], pillColor, 0);
+    lv_obj_set_style_border_color(uiUnitPills[i], pillColor, 0);
+  }
 }
 
 void syncRunningUi() {
@@ -383,7 +400,12 @@ void syncRunningUi() {
 }
 
 void syncConfigUi() {
-  if (uiSelected != nullptr) lv_obj_set_x(uiSelected, 18 + (chosen * 76));
+  for (int i = 0; i < 3; i++) {
+    if (uiUnitPills[i] == nullptr) continue;
+    lv_color_t pillColor = (i == chosen) ? SETUP_PILL_RED : STAR_ORANGE;
+    lv_obj_set_style_bg_color(uiUnitPills[i], pillColor, 0);
+    lv_obj_set_style_border_color(uiUnitPills[i], pillColor, 0);
+  }
 }
 
 void syncAlarmUi() {
@@ -403,13 +425,15 @@ void buildSetupUi() {
   createPanel(scr, 10, 10, 220, 34, STAR_PANEL, 16);
   createPanel(scr, 14, 52, 82, 12, STAR_ORANGE, 6);
   createPanel(scr, 144, 52, 82, 12, STAR_CYAN, 6);
+  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *pill = createPanel(scr, 18 + (i * 76), 148, 60, 18, SETUP_PILL_RED, 8);
-    lv_obj_set_style_border_width(pill, 2, 0);
-    lv_obj_set_style_border_color(pill, SETUP_PILL_RED, 0);
-    lv_obj_set_style_border_opa(pill, LV_OPA_COVER, 0);
+    uiUnitPills[i] = createPanel(scr, 18 + (i * 76), 148, 60, 18, STAR_ORANGE, 8);
+    lv_obj_set_style_border_width(uiUnitPills[i], 2, 0);
+    lv_obj_set_style_border_color(uiUnitPills[i], STAR_ORANGE, 0);
+    lv_obj_set_style_border_opa(uiUnitPills[i], LV_OPA_COVER, 0);
+    uiUnitLabels[i] = createPillLabel(uiUnitPills[i], unitLabels[i]);
   }
-  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, SETUP_PILL_RED, 2);
+  uiSelected = nullptr;
   uiAction = createPanel(scr, 24, 178, 192, 30, STAR_CYAN, 12);
   syncSetupUi();
 }
@@ -418,6 +442,9 @@ void buildRunningUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSelected = nullptr;
+  for (int i = 0; i < 3; i++) uiUnitPills[i] = nullptr;
+  for (int i = 0; i < 3; i++) uiUnitLabels[i] = nullptr;
   uiProgress = lv_arc_create(scr);
   lv_obj_set_size(uiProgress, 222, 222);
   lv_obj_center(uiProgress);
@@ -445,13 +472,15 @@ void buildConfigUi() {
   setCommonScreenStyle(scr);
   createPanel(scr, 10, 10, 220, 30, STAR_PANEL, 14);
   uiConfigAction = createPanel(scr, 26, 176, 188, 28, STAR_CYAN, 12);
+  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *pill = createPanel(scr, 18 + (i * 76), 148, 60, 18, SETUP_PILL_RED, 8);
-    lv_obj_set_style_border_width(pill, 2, 0);
-    lv_obj_set_style_border_color(pill, SETUP_PILL_RED, 0);
-    lv_obj_set_style_border_opa(pill, LV_OPA_COVER, 0);
+    uiUnitPills[i] = createPanel(scr, 18 + (i * 76), 148, 60, 18, STAR_ORANGE, 8);
+    lv_obj_set_style_border_width(uiUnitPills[i], 2, 0);
+    lv_obj_set_style_border_color(uiUnitPills[i], STAR_ORANGE, 0);
+    lv_obj_set_style_border_opa(uiUnitPills[i], LV_OPA_COVER, 0);
+    uiUnitLabels[i] = createPillLabel(uiUnitPills[i], unitLabels[i]);
   }
-  uiSelected = createPanel(scr, 18 + (chosen * 76), 168, 60, 4, SETUP_PILL_RED, 2);
+  uiSelected = nullptr;
   syncConfigUi();
 }
 
@@ -459,6 +488,8 @@ void buildAlarmUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clean(scr);
   setCommonScreenStyle(scr);
+  uiSelected = nullptr;
+  for (int i = 0; i < 3; i++) uiUnitLabels[i] = nullptr;
   uiAlarmBanner = createPanel(scr, 10, 10, 220, 34, STAR_AMBER, 16);
   uiAction = createPanel(scr, 40, 176, 160, 28, STAR_PANEL, 12);
   uiProgress = lv_arc_create(scr);
@@ -479,6 +510,7 @@ void buildAlarmUi() {
   lv_obj_set_style_outline_width(uiProgress, 0, 0);
   lv_obj_set_style_outline_opa(uiProgress, LV_OPA_TRANSP, 0);
   uiAlarmFlashCache = false;
+  for (int i = 0; i < 3; i++) uiUnitPills[i] = nullptr;
   syncAlarmUi();
 }
 
@@ -487,13 +519,6 @@ void renderSetupTextOverlay() {
   formatTimeText(timeText, sizeof(timeText), num);
   drawBuiltinTextTransparent("BLY POMODORO", 120, 27, TFT_FONT_TITLE, STAR_AMBER_565);
   drawBuiltinText(timeText, 120, 112, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  //drawBuiltinText("STARFLEET TIMELINE", 120, 146, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
-  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
-  for (int i = 0; i < 3; i++) {
-    uint16_t unitBg = SETUP_PILL_RED_565;
-    uint16_t unitFg = STAR_TEXT_565;
-    drawBuiltinText(unitLabels[i], 48 + (i * 76), 157, TFT_FONT_SMALL, unitFg, unitBg);
-  }
   drawBuiltinText("START", 120, 193, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
 }
 
@@ -516,10 +541,6 @@ void renderConfigTextOverlay() {
   drawBuiltinText("CFG", 120, 25, TFT_FONT_MEDIUM, STAR_AMBER_565, STAR_PANEL_565);
   drawBuiltinText(hint, 120, 56, TFT_FONT_SMALL, STAR_MUTED_565, STAR_BG_565);
   drawBuiltinText(timeText, 120, 116, TFT_FONT_TIMER, STAR_TEXT_565, STAR_BG_565);
-  static const char *unitLabels[3] = { "HRS", "MIN", "SEC" };
-  for (int i = 0; i < 3; i++) {
-    drawBuiltinText(unitLabels[i], 48 + (i * 76), 157, TFT_FONT_SMALL, STAR_TEXT_565, SETUP_PILL_RED_565);
-  }
   drawBuiltinText(action, 120, 190, TFT_FONT_LARGE, STAR_DARK_565, STAR_CYAN_565);
   drawBuiltinText(footer, 120, 226, TFT_FONT_SMALL, STAR_AMBER_565, STAR_BG_565);
 }
